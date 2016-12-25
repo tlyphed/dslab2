@@ -1,0 +1,13 @@
+*	Chatserver	chatserver
+*	Client		1
+*	Client		2
+
+1:	!login alice.vienna.at 12345
+>	verify("success")
+
+2:	!login alice.vienna.at 12345
+>	verify("already")
+
+1:	!exit
+2:  !exit
+chatserver: !exit

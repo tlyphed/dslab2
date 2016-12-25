@@ -1,0 +1,66 @@
+Testsuite: test.ScenarioTest
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 37,152 sec
+------------- Standard Output ---------------
+00_login_test.txt
+15:37:12.726		alice.vienna.at> !login alice.vienna.at 12345
+15:37:12.746		alice.vienna.at: Successfully logged in.
+15:37:13.324		alice.vienna.at> !list
+15:37:13.335		alice.vienna.at: Online users:
+15:37:13.336		alice.vienna.at: alice.vienna.at
+15:37:13.860		chatserver> !users
+15:37:13.860		chatserver:
+15:37:13.860		tobias.com offline
+15:37:13.860		alice.vienna.at online
+15:37:13.860		bill.de offline
+15:37:14.365		alice.vienna.at> !exit
+15:37:14.869		chatserver> !exit
+15:37:14.871		chatserver: Shutdown complete.
+################################################################################
+01_multiple_login_test.txt
+15:37:21.397		1> !login alice.vienna.at 12345
+15:37:21.398		1: Successfully logged in.
+15:37:21.903		2> !login alice.vienna.at 12345
+15:37:21.907		2: Already logged in.
+15:37:22.408		1> !exit
+15:37:22.912		2> !exit
+15:37:23.412		chatserver> !exit
+15:37:23.414		chatserver: Shutdown complete.
+################################################################################
+02_public_msg_test.txt
+15:37:31.947		alice.vienna.at> !login alice.vienna.at 12345
+15:37:31.949		alice.vienna.at: Successfully logged in.
+15:37:32.452		bill.de> !login bill.de 23456
+15:37:32.455		bill.de: Successfully logged in.
+15:37:32.955		tobias.com> !login tobias.com 12345
+15:37:32.957		tobias.com: Successfully logged in.
+15:37:33.456		alice.vienna.at> !send public message
+15:37:33.457		bill.de: alice.vienna.at: public message
+15:37:33.457		tobias.com: alice.vienna.at: public message
+15:37:33.457		alice.vienna.at: Message sent.
+15:37:33.961		tobias.com> !exit
+15:37:34.465		alice.vienna.at> !exit
+15:37:34.967		bill.de> !exit
+15:37:35.472		chatserver> !exit
+15:37:35.472		chatserver: Shutdown complete.
+################################################################################
+03_private_msg_test.txt
+15:37:41.995		alice.vienna.at> !login alice.vienna.at 12345
+15:37:41.998		alice.vienna.at: Successfully logged in.
+15:37:42.499		bill.de> !login bill.de 23456
+15:37:42.501		bill.de: Successfully logged in.
+15:37:43.005		bill.de> !register localhost:9000
+15:37:43.019		bill.de: Successfully registered.
+15:37:43.511		alice.vienna.at> !msg bill.de private message
+15:37:43.523		bill.de: bill.de: private message
+15:37:43.523		alice.vienna.at: bill.de replied with ack!
+15:37:44.016		alice.vienna.at> !exit
+15:37:44.519		bill.de> !exit
+15:37:45.024		chatserver> !exit
+15:37:45.025		chatserver: Shutdown complete.
+################################################################################
+------------- ---------------- ---------------
+
+Testcase: 00_login_test took 6,952 sec
+Testcase: 01_multiple_login_test took 8,538 sec
+Testcase: 02_public_msg_test took 12,06 sec
+Testcase: 03_private_msg_test took 9,549 sec
