@@ -24,7 +24,7 @@ public class TCPServer extends AbstractTCPServer {
 
     @Override
     protected IChannel wrapSocket(Socket socket) {
-        return new Base64Channel(new EncryptedChannel(super.wrapSocket(socket), EncryptedChannel.Mode.SERVER));
+        return new Base64Channel(new EncryptedChannel(super.wrapSocket(socket), EncryptedChannel.Mode.SERVER, new ServerKeyStore()));
     }
 
     protected void processInput(TCPWorker worker, IChannel channel) throws IOException {

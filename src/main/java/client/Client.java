@@ -48,7 +48,7 @@ public class Client implements IClientCli, Runnable {
         shell.register(this);
 
         //channelConnection = new ChannelConnection(new TCPChannel("localhost", tcpPort));
-        channel = new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT);
+        channel = new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT, new ClientKeyStore());
         channelConnection = new ChannelConnection(new Base64Channel(channel));
         channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
             @Override
