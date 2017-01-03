@@ -3,7 +3,7 @@ package util;
 import java.io.IOException;
 import java.util.concurrent.Semaphore;
 
-public class ChannelConnection {
+public class ChannelConnection implements Runnable{
 
     private Thread readingThread;
 
@@ -25,7 +25,8 @@ public class ChannelConnection {
         this.channel = channel;
     }
 
-    public void open(){
+    @Override
+    public void run(){
         channel.open();
         readingThread = new Thread(new Runnable() {
             @Override
@@ -79,11 +80,11 @@ public class ChannelConnection {
         this.responseListener = responseListener;
     }
 
-    private void writeToServer(String msg) throws IOException {
+    public void writeToServer(String msg) throws IOException {
         channel.write(msg);
     }
 
-    private void writeToServer(String msg, final boolean silent, final ResponseListener callback) throws IOException {
+    public void writeToServer(String msg, final boolean silent, final ResponseListener callback) throws IOException {
         silentMode = silent;
         new Thread(new Runnable() {
             @Override

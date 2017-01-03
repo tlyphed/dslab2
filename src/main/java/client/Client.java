@@ -3,7 +3,9 @@ package client;
 import cli.Command;
 import cli.Shell;
 import util.AbstractTCPServer;
+import util.ChannelConnection;
 import util.Config;
+import util.TCPChannel;
 
 import java.io.*;
 import java.net.*;
@@ -17,6 +19,8 @@ public class Client implements IClientCli, Runnable {
     private PrintStream userResponseStream;
 
     private Shell shell;
+
+    private ChannelConnection channelConnection;
 
     private int tcpPort;
     private int udpPort;
@@ -53,6 +57,14 @@ public class Client implements IClientCli, Runnable {
         shell = new Shell(componentName, userRequestStream, userResponseStream);
         shell.register(this);
 
+        channelConnection = new ChannelConnection(new TCPChannel("localhost", tcpPort));
+        channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
+            @Override
+            public void onResponse(String response) {
+                Client.this.onResponse(response);
+            }
+        });
+
     }
 
     @Override
@@ -63,94 +75,38 @@ public class Client implements IClientCli, Runnable {
         shellThread.setName("ShellThread");
         shellThread.start();
 
-        try (Socket socket = new Socket("localhost", tcpPort);
-             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+        Thread channelConnectionThread = new Thread(channelConnection);
+        channelConnectionThread.setName("ChannelConnectionThread");
+        channelConnectionThread.start();
+    }
 
-            this.socket = socket;
-            this.out = out;
-            this.in = in;
-
-            Thread readingThread = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    Thread.currentThread().setName("ReadingThread");
-                    try {
-                        processInput(in, out);
-                    } catch (IOException | InterruptedException e) {
-                        if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            });
-
-            readingThread.start();
-
-            try {
-                readingThread.join();
-            } catch (InterruptedException e) {
+    private void onResponse(String msg) {
+        try {
+            if (msg.startsWith("!pubmsg: ")) {
+                lastMsg = msg.substring(msg.indexOf(":") + 2);
+                shell.writeLine(lastMsg);
+            } else if (msg.equals("exit")) {
+                exit();
+            } else {
+                shell.writeLine(msg);
             }
-
-            exit();
-
-        } catch (IOException e) {
+        } catch (IOException e){
             e.printStackTrace();
         }
     }
 
-    private void processInput(BufferedReader in, BufferedWriter out) throws IOException, InterruptedException {
-        String line;
-        while (!Thread.currentThread().isInterrupted()) {
-            available.acquire();
-            if ((line = in.readLine()) != null) {
-                if (line.startsWith("!pubmsg: ")) {
-                    lastMsg = line.substring(line.indexOf(":") + 2);
-                    shell.writeLine(lastMsg);
-                } else if (line.equals("exit")) {
-                    exit();
-                } else {
-                    if (!silentMode) {
-                        shell.writeLine(line);
-                    }
-                    lastResponse = line;
-                }
-            } else {
-                break;
-            }
-            available.release();
-        }
-    }
-
     private void writeToServer(String msg) throws IOException {
-        out.write(msg);
-        out.newLine();
-        out.flush();
+        channelConnection.writeToServer(msg);
     }
 
-    private void writeToServer(String msg, final boolean silent, final Callback callback) throws IOException {
-        silentMode = silent;
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Thread.currentThread().setName("ServerRequestThread");
-                try {
-                    available.acquire();
-                    silentMode = false;
-                    String response = lastResponse;
-                    available.release();
-                    callback.onResponse(response);
-                } catch (InterruptedException e) {
-                }
-            }
-        }).start();
-        writeToServer(msg);
+    private void writeToServer(String msg, final boolean silent, final ChannelConnection.ResponseListener callback) throws IOException {
+        channelConnection.writeToServer(msg, silent, callback);
     }
 
     @Override
     @Command
     public void login(final String username, String password) throws IOException {
-        writeToServer("login " + username + " " + password, false, new Callback() {
+        writeToServer("login " + username + " " + password, false, new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
                 if (response.equals("Successfully logged in.")) {
@@ -206,7 +162,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void msg(final String username, final String message) throws IOException {
-        writeToServer("lookup " + username, true, new Callback() {
+        writeToServer("lookup " + username, true, new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
                 try {
@@ -255,7 +211,7 @@ public class Client implements IClientCli, Runnable {
                 shell.writeLine("Port already used.");
                 return;
             }
-            writeToServer("register " + privateAddress, false, new Callback() {
+            writeToServer("register " + privateAddress, false, new ChannelConnection.ResponseListener() {
                 @Override
                 public void onResponse(String response) {
                     if (response.equals("Successfully registered.")) {
@@ -333,8 +289,4 @@ public class Client implements IClientCli, Runnable {
         return null;
     }
 
-
-    interface Callback {
-        void onResponse(String response);
-    }
 }
