@@ -1,9 +1,9 @@
-package util;
+package transport;
 
 import java.io.*;
 import java.net.Socket;
 
-public class TCPChannel implements IChannel{
+public class TCPChannel implements IChannel {
 
     private String host;
     private Integer port;
@@ -19,10 +19,18 @@ public class TCPChannel implements IChannel{
         this.port = port;
     }
 
+    public TCPChannel(Socket socket){
+        if(socket == null){
+            throw new IllegalArgumentException();
+        }
+        this.socket = socket;
+    }
+
     public void open(){
         try {
-
-            this.socket = new Socket(host, port);
+            if(socket == null){
+                this.socket = new Socket(host, port);
+            }
             this.out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
             this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 

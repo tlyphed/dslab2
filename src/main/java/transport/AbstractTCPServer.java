@@ -1,6 +1,6 @@
-package util;
+package transport;
 
-import java.io.*;
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -31,7 +31,7 @@ public abstract class AbstractTCPServer implements Runnable {
             this.serverSocket = serverSocket;
             while (!Thread.interrupted()) {
                 Socket socket = serverSocket.accept();
-                TCPWorker tcpWorker = new TCPWorker(socket);
+                TCPWorker tcpWorker = new TCPWorker(wrapSocket(socket));
                 workers.add(tcpWorker);
                 executor.execute(tcpWorker);
             }
@@ -43,7 +43,7 @@ public abstract class AbstractTCPServer implements Runnable {
         executor.shutdown();
     }
 
-    protected ConcurrentLinkedQueue<TCPWorker> getWorkers(){
+    protected ConcurrentLinkedQueue<TCPWorker> getWorkers() {
         return workers;
     }
 
@@ -60,66 +60,65 @@ public abstract class AbstractTCPServer implements Runnable {
 
     }
 
-    protected abstract void processInput(TCPWorker worker, BufferedReader in, BufferedWriter out) throws IOException;
+    protected IChannel wrapSocket(Socket socket){
+        return new TCPChannel(socket);
+    }
+
+    protected abstract void processInput(TCPWorker worker, IChannel channel) throws IOException;
 
     protected class TCPWorker implements Runnable {
 
-        private Socket socket;
-        private BufferedWriter output;
+        private IChannel channel;
         private Thread thread;
 
-        TCPWorker(Socket socket) {
-            this.socket = socket;
+        TCPWorker(IChannel channel) {
+            this.channel = channel;
         }
 
         public void shutdown() throws IOException {
-            socket.shutdownInput();
+            channel.close();
             if (thread != null) {
                 thread.interrupt();
             }
         }
 
-        public BufferedWriter getOutput() {
-            return output;
+        public IChannel getChannel() {
+            return channel;
         }
 
         @Override
         public void run() {
             thread = Thread.currentThread();
             Thread.currentThread().setName("TCPWorker #" + ++threadCounter);
-            try (final BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                 final BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-                 final Socket socket = this.socket) {
 
-                output = out;
+            channel.open();
 
-                Thread readingThread = new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Thread.currentThread().setName("TCP-ReadingThread");
-                        try {
-                            processInput(TCPWorker.this, in, out);
-                        } catch (IOException e) {
+            Thread readingThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    Thread.currentThread().setName("TCP-ReadingThread");
+                    try {
+                        processInput(TCPWorker.this, channel);
+                    } catch (IOException e) {
+                        if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
                             e.printStackTrace();
                         }
                     }
-                });
-
-                readingThread.start();
-                try {
-                    readingThread.join();
-                } catch (InterruptedException e) {
                 }
-                workers.remove(this);
-            } catch (IOException e) {
-                e.printStackTrace();
+            });
+
+            readingThread.start();
+            try {
+                readingThread.join();
+            } catch (InterruptedException e) {
             }
+            workers.remove(this);
 
         }
     }
 
-    public static boolean checkPort(int port){
-        try (ServerSocket s = new ServerSocket(port)){
+    public static boolean checkPort(int port) {
+        try (ServerSocket s = new ServerSocket(port)) {
 
         } catch (IOException e) {
             return false;

@@ -1,10 +1,10 @@
-package util;
+package transport;
 
 import org.bouncycastle.util.encoders.Base64;
 
 import java.io.IOException;
 
-public class Base64Channel implements IChannel{
+public class Base64Channel implements IChannel {
 
     private IChannel channel;
 
@@ -33,10 +33,16 @@ public class Base64Channel implements IChannel{
     }
 
     private String base64Encode(String msg) {
+        if(msg == null) {
+            return null;
+        }
         return new String(Base64.encode(msg.getBytes()));
     }
 
     private String base64Decode(String msg) {
+        if(msg == null) {
+            return null;
+        }
         return new String(Base64.decode(msg));
     }
 

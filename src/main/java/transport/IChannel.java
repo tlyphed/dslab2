@@ -1,10 +1,10 @@
-package util;
+package transport;
 
 import java.io.IOException;
 
 public interface IChannel {
 
-    void open();
+    void open() throws IOException;
 
     void close() throws IOException;
 

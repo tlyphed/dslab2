@@ -2,14 +2,11 @@ package client;
 
 import cli.Command;
 import cli.Shell;
-import util.AbstractTCPServer;
-import util.ChannelConnection;
+import transport.*;
 import util.Config;
-import util.TCPChannel;
 
 import java.io.*;
 import java.net.*;
-import java.util.concurrent.Semaphore;
 
 public class Client implements IClientCli, Runnable {
 
@@ -20,20 +17,13 @@ public class Client implements IClientCli, Runnable {
 
     private Shell shell;
 
+    private EncryptedChannel channel;
     private ChannelConnection channelConnection;
 
     private int tcpPort;
     private int udpPort;
 
-    private Socket socket;
-    private BufferedReader in;
-    private BufferedWriter out;
-
-    private String lastResponse, lastMsg;
-
-    private final Semaphore available = new Semaphore(1, true);
-
-    private boolean silentMode = false;
+    private String lastMsg;
 
     private AbstractTCPServer tcpServer;
 
@@ -57,7 +47,9 @@ public class Client implements IClientCli, Runnable {
         shell = new Shell(componentName, userRequestStream, userResponseStream);
         shell.register(this);
 
-        channelConnection = new ChannelConnection(new TCPChannel("localhost", tcpPort));
+        //channelConnection = new ChannelConnection(new TCPChannel("localhost", tcpPort));
+        channel = new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT);
+        channelConnection = new ChannelConnection(new Base64Channel(channel));
         channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
@@ -136,7 +128,7 @@ public class Client implements IClientCli, Runnable {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Thread.currentThread().setName("UPDThread");
+                Thread.currentThread().setName("UDPThread");
                 try {
                     try (DatagramSocket socket = new DatagramSocket()) {
                         byte[] buf = "list".getBytes();
@@ -221,12 +213,10 @@ public class Client implements IClientCli, Runnable {
                             }
                             tcpServer = new AbstractTCPServer(port) {
                                 @Override
-                                protected void processInput(TCPWorker worker, BufferedReader in, BufferedWriter out) throws IOException {
-                                    String line = in.readLine();
+                                protected void processInput(TCPWorker worker, IChannel channel) throws IOException {
+                                    String line = channel.read();
                                     shell.writeLine(line);
-                                    out.write("!ack");
-                                    out.newLine();
-                                    out.flush();
+                                    channel.write("!ack");
                                 }
                             };
                             Thread listeningThread = new Thread(tcpServer);
@@ -256,9 +246,6 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void exit() throws IOException {
-        if (socket != null && !socket.isClosed()) {
-            socket.close();
-        }
         if (tcpServer != null) {
             tcpServer.shutdown();
         }
@@ -280,13 +267,9 @@ public class Client implements IClientCli, Runnable {
         new Thread(client).start();
     }
 
-    // --- Commands needed for Lab 2. Please note that you do not have to
-    // implement them for the first submission. ---
-
     @Override
-    public String authenticate(String username) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+    public void authenticate(String username) throws IOException {
+        channel.authenticate(username);
     }
 
 }

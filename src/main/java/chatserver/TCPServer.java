@@ -1,10 +1,12 @@
 package chatserver;
 
-import util.AbstractTCPServer;
+import transport.AbstractTCPServer;
+import transport.Base64Channel;
+import transport.EncryptedChannel;
+import transport.IChannel;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
+import java.net.Socket;
 
 public class TCPServer extends AbstractTCPServer {
 
@@ -14,18 +16,21 @@ public class TCPServer extends AbstractTCPServer {
 
     private void send(String message, TCPWorker sender) throws IOException {
         for(TCPWorker worker : getWorkers()){
-            if(worker != sender && worker.getOutput() != null){
-                worker.getOutput().write("!pubmsg: " + message);
-                worker.getOutput().newLine();
-                worker.getOutput().flush();
+            if(worker != sender && worker.getChannel() != null){
+                worker.getChannel().write("!pubmsg: " + message);
             }
         }
     }
 
-    protected void processInput(TCPWorker worker, BufferedReader in, BufferedWriter out) throws IOException {
+    @Override
+    protected IChannel wrapSocket(Socket socket) {
+        return new Base64Channel(new EncryptedChannel(super.wrapSocket(socket), EncryptedChannel.Mode.SERVER));
+    }
+
+    protected void processInput(TCPWorker worker, IChannel channel) throws IOException {
         String line;
         User user = null;
-        while((line = in.readLine()) != null && !Thread.currentThread().isInterrupted()){
+        while((line = channel.read()) != null && !Thread.currentThread().isInterrupted()){
             String cmd[] = line.split(" ");
             switch(cmd[0]){
                 case "login":
@@ -38,30 +43,20 @@ public class TCPServer extends AbstractTCPServer {
                                 if(!user.isOnline()){
                                     if(user.getPassword().equals(password)){
                                         user.setOnline(true);
-                                        out.write("Successfully logged in.");
-                                        out.newLine();
-                                        out.flush();
+                                        channel.write("Successfully logged in.");
                                         break;
                                     }
-                                    out.write("Wrong username or password.");
-                                    out.newLine();
-                                    out.flush();
+                                    channel.write("Wrong username or password.");
                                     break;
                                 }
-                                out.write("Already logged in.");
-                                out.newLine();
-                                out.flush();
+                                channel.write("Already logged in.");
                                 break;
                             }
                         }
-                        out.write("Unkown User.");
-                        out.newLine();
-                        out.flush();
+                        channel.write("Unkown User.");
                         break;
                     }
-                    out.write("Wrong argument.");
-                    out.newLine();
-                    out.flush();
+                    channel.write("Wrong argument.");
                     break;
                 case "logout":
                     if(cmd.length == 1){
@@ -69,57 +64,39 @@ public class TCPServer extends AbstractTCPServer {
                             user.setOnline(false);
                             user.setIpAddress(null);
                             user = null;
-                            out.write("Successfully logged out.");
-                            out.newLine();
-                            out.flush();
+                            channel.write("Successfully logged out.");
                             break;
                         }
-                        out.write("Not logged in.");
-                        out.newLine();
-                        out.flush();
+                        channel.write("Not logged in.");
                         break;
                     }
-                    out.write("Wrong argument.");
-                    out.newLine();
-                    out.flush();
+                    channel.write("Wrong argument.");
                     break;
                 case "send":
                     if(cmd.length > 1){
                         if(user != null){
                             String msg = line.substring(line.indexOf(" ") + 1);
                             send(user.getName() + ": "+  msg, worker);
-                            out.write("Message sent.");
-                            out.newLine();
-                            out.flush();
+                            channel.write("Message sent.");
                             break;
                         }
-                        out.write("Not logged in.");
-                        out.newLine();
-                        out.flush();
+                        channel.write("Not logged in.");
                         break;
                     }
-                    out.write("Wrong argument.");
-                    out.newLine();
-                    out.flush();
+                    channel.write("Wrong argument.");
                     break;
                 case "register":
                     if(cmd.length == 2){
                         if(user != null){
                             String ipAddress = cmd[1];
                             user.setIpAddress(ipAddress);
-                            out.write("Successfully registered.");
-                            out.newLine();
-                            out.flush();
+                            channel.write("Successfully registered.");
                             break;
                         }
-                        out.write("Not logged in.");
-                        out.newLine();
-                        out.flush();
+                        channel.write("Not logged in.");
                         break;
                     }
-                    out.write("Wrong argument.");
-                    out.newLine();
-                    out.flush();
+                    channel.write("Wrong argument.");
                     break;
                 case "lookup":
                     if(cmd.length == 2){
@@ -128,33 +105,23 @@ public class TCPServer extends AbstractTCPServer {
                             User lookup = UserStore.getInstance().getUser(lookupName);
                             if(lookup != null){
                                 if(lookup.getIpAddress() != null){
-                                    out.write(lookup.getIpAddress());
-                                    out.newLine();
-                                    out.flush();
+                                    channel.write(lookup.getIpAddress());
                                     break;
                                 }
                             }
-                            out.write("Wrong username or user not registered.");
-                            out.newLine();
-                            out.flush();
+                            channel.write("Wrong username or user not registered.");
                             break;
                         }
-                        out.write("Not logged in.");
-                        out.newLine();
-                        out.flush();
+                        channel.write("Not logged in.");
                         break;
                     }
-                    out.write("Wrong argument.");
-                    out.newLine();
-                    out.flush();
+                    channel.write("Wrong argument.");
                     break;
                 case "exit":
                     worker.shutdown();
                     break;
                 default:
-                    out.write("Wrong argument.");
-                    out.newLine();
-                    out.flush();
+                    channel.write("Wrong argument.");
             }
         }
         if(user != null){
