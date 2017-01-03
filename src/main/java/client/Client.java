@@ -268,8 +268,10 @@ public class Client implements IClientCli, Runnable {
     }
 
     @Override
+    @Command
     public void authenticate(String username) throws IOException {
         channel.authenticate(username);
+        channelConnection.setListening(true);
     }
 
 }

@@ -91,27 +91,32 @@ public abstract class AbstractTCPServer implements Runnable {
             thread = Thread.currentThread();
             Thread.currentThread().setName("TCPWorker #" + ++threadCounter);
 
-            channel.open();
-
-            Thread readingThread = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    Thread.currentThread().setName("TCP-ReadingThread");
-                    try {
-                        processInput(TCPWorker.this, channel);
-                    } catch (IOException e) {
-                        if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
-                            e.printStackTrace();
+            try {
+                channel.open();
+                Thread readingThread = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Thread.currentThread().setName("TCP-ReadingThread");
+                        try {
+                            processInput(TCPWorker.this, channel);
+                        } catch (IOException e) {
+                            if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
+                                e.printStackTrace();
+                            }
                         }
                     }
-                }
-            });
+                });
 
-            readingThread.start();
-            try {
-                readingThread.join();
-            } catch (InterruptedException e) {
+                readingThread.start();
+                try {
+                    readingThread.join();
+                } catch (InterruptedException e) {
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
+
+
             workers.remove(this);
 
         }

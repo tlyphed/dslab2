@@ -13,7 +13,9 @@ public class ChannelConnection implements Runnable{
 
     private IChannel channel;
 
-    private String lastResponse, lastMsg;
+    private String lastResponse;
+
+    private boolean listening = false;
 
     private final Semaphore available = new Semaphore(1, true);
 
@@ -27,22 +29,30 @@ public class ChannelConnection implements Runnable{
 
     @Override
     public void run(){
-        channel.open();
-        readingThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Thread.currentThread().setName("ReadingThread");
-                try {
-                    processInput();
-                } catch (IOException | InterruptedException e) {
-                    if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
-                        e.printStackTrace();
+        try {
+            channel.open();
+
+            readingThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    Thread.currentThread().setName("ReadingThread");
+                    try {
+                        if(listening){
+                            processInput();
+                        }
+                    } catch (IOException | InterruptedException e) {
+                        if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
+                            e.printStackTrace();
+                        }
                     }
                 }
-            }
-        });
+            });
 
-        readingThread.start();
+            readingThread.start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
 
     }
 
@@ -103,4 +113,11 @@ public class ChannelConnection implements Runnable{
         writeToServer(msg);
     }
 
+    public void setListening(boolean listening) {
+        this.listening = listening;
+    }
+
+    public boolean isListening() {
+        return listening;
+    }
 }

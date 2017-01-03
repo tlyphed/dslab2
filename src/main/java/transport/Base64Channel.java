@@ -13,7 +13,7 @@ public class Base64Channel implements IChannel {
     }
 
     @Override
-    public void open() {
+    public void open() throws IOException {
         channel.open();
     }
 

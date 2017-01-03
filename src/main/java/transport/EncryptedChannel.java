@@ -133,10 +133,6 @@ public class EncryptedChannel implements IChannel{
 
     @Override
     public void open() throws IOException {
-        if(!authenticated){
-            throw new IllegalStateException("authenticate first!");
-        }
-
         channel.open();
 
         if(mode == Mode.SERVER){
