@@ -47,7 +47,7 @@ public class EncryptedChannelServer extends EncryptedChannel {
                     throw new AuthException("malformed client auth request");
                 }
 
-                String user = new String(Base64.decode(authMsgArgs[1]));
+                String user = authMsgArgs[1];
 
                 PublicKey publicKey = keyStore.getPublicKey(user);
 
@@ -59,14 +59,14 @@ public class EncryptedChannelServer extends EncryptedChannel {
 
                 String serverChallenge = generateEncodedRandom(32);
 
-                KeyGenerator generator = KeyGenerator.getInstance("ALGORITHM_AES");
+                KeyGenerator generator = KeyGenerator.getInstance("AES");
                 generator.init(32 * 8);
                 SecretKey key = generator.generateKey();
 
                 String secretKey = new String(Base64.encode(key.getEncoded()));
                 String ivParameter = generateEncodedRandom(16);
 
-                setUpAES(new SecretKeySpec(key.getEncoded(), "ALGORITHM_AES"), new IvParameterSpec(Base64.decode(ivParameter.getBytes())));
+                setUpAES(new SecretKeySpec(key.getEncoded(), "AES"), new IvParameterSpec(Base64.decode(ivParameter.getBytes())));
 
                 rsa.init(Cipher.ENCRYPT_MODE, publicKey);
 

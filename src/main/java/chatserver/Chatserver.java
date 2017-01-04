@@ -3,89 +3,97 @@ package chatserver;
 import cli.Command;
 import cli.Shell;
 import util.Config;
+import util.IPublicKeyStore;
+import util.Keys;
+import util.PublicKeyStore;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.security.PrivateKey;
 
 public class Chatserver implements IChatserverCli, Runnable {
 
-	private String componentName;
-	private Config config;
-	private InputStream userRequestStream;
-	private PrintStream userResponseStream;
+    private String componentName;
+    private Config config;
+    private InputStream userRequestStream;
+    private PrintStream userResponseStream;
 
     private UDPServer udpServer;
     private TCPServer tcpServer;
 
     private Shell shell;
 
-	/**
-	 * @param componentName
-	 *            the name of the component - represented in the prompt
-	 * @param config
-	 *            the configuration to use
-	 * @param userRequestStream
-	 *            the input stream to read user input from
-	 * @param userResponseStream
-	 *            the output stream to write the console output to
-	 */
-	public Chatserver(String componentName, Config config, InputStream userRequestStream, PrintStream userResponseStream) {
-		this.componentName = componentName;
-		this.config = config;
-		this.userRequestStream = userRequestStream;
-		this.userResponseStream = userResponseStream;
+    /**
+     * @param componentName      the name of the component - represented in the prompt
+     * @param config             the configuration to use
+     * @param userRequestStream  the input stream to read user input from
+     * @param userResponseStream the output stream to write the console output to
+     */
+    public Chatserver(String componentName, Config config, InputStream userRequestStream, PrintStream userResponseStream) {
+        this.componentName = componentName;
+        this.config = config;
+        this.userRequestStream = userRequestStream;
+        this.userResponseStream = userResponseStream;
 
-        tcpServer = new TCPServer(config.getInt("tcp.port"));
-        udpServer = new UDPServer(config.getInt("udp.port"));
-
-		UserStore.getInstance().loadFromFile();
+        UserStore.getInstance().loadFromFile();
 
         shell = new Shell(componentName, userRequestStream, userResponseStream);
 
         shell.register(this);
-	}
+    }
 
-	@Override
-	public void run() {
+    @Override
+    public void run() {
         Thread.currentThread().setName("ChatserverThread");
 
-        Thread udpServerThread = new Thread(udpServer);
-        udpServerThread.setName("UPDServerThread");
-        udpServerThread.start();
-
-        Thread tcpServerThread = new Thread(tcpServer);
-        tcpServerThread.setName("TCPServerThread");
-        tcpServerThread.start();
-
-        Thread shellThread = new Thread(shell);
-        shellThread.setName("ShellThread");
-        shellThread.start();
-
         try {
-            udpServerThread.join();
-            tcpServerThread.join();
-            shellThread.join();
-        } catch (InterruptedException e) {
+            IPublicKeyStore keyStore = new PublicKeyStore(new File(config.getString("keys.dir")));
+            PrivateKey chatserverKey = Keys.readPrivatePEM(new File(config.getString("key")));
+
+            tcpServer = new TCPServer(config.getInt("tcp.port"), keyStore, chatserverKey);
+            udpServer = new UDPServer(config.getInt("udp.port"));
+
+            Thread udpServerThread = new Thread(udpServer);
+            udpServerThread.setName("UPDServerThread");
+            udpServerThread.start();
+
+            Thread tcpServerThread = new Thread(tcpServer);
+            tcpServerThread.setName("TCPServerThread");
+            tcpServerThread.start();
+
+            Thread shellThread = new Thread(shell);
+            shellThread.setName("ShellThread");
+            shellThread.start();
+
+            try {
+                udpServerThread.join();
+                tcpServerThread.join();
+                shellThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        } catch (IOException e) {
             e.printStackTrace();
         }
-	}
+    }
 
-	@Override
+    @Override
     @Command
-	public String users() throws IOException {
+    public String users() throws IOException {
         StringBuilder sb = new StringBuilder();
-        for(User user : UserStore.getInstance().listUsers()){
+        for (User user : UserStore.getInstance().listUsers()) {
             sb.append(user.getName() + " " + (user.isOnline() ? "online" : "offline"));
             sb.append("\r\n");
         }
 
-		return sb.toString();
-	}
+        return sb.toString();
+    }
 
-	@Override
+    @Override
     @Command
-	public String exit() throws IOException {
+    public String exit() throws IOException {
         udpServer.shutdown();
         tcpServer.shutdown();
 
@@ -93,21 +101,20 @@ public class Chatserver implements IChatserverCli, Runnable {
         userRequestStream.close();
         userResponseStream.close();
 
-		return "Shutdown complete.";
-	}
+        return "Shutdown complete.";
+    }
 
-	/**
-	 * @param args
-	 *            the first argument is the name of the {@link Chatserver}
-	 *            component
-	 */
-	public static void main(String[] args) {
+    /**
+     * @param args the first argument is the name of the {@link Chatserver}
+     *             component
+     */
+    public static void main(String[] args) {
         String name = "chatserver";
-        if(args.length > 0){
+        if (args.length > 0) {
             name = args[0];
         }
-		Chatserver chatserver = new Chatserver(name, new Config("chatserver"), System.in, System.out);
+        Chatserver chatserver = new Chatserver(name, new Config("chatserver"), System.in, System.out);
         (new Thread(chatserver)).start();
-	}
+    }
 
 }

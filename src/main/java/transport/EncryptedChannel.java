@@ -19,8 +19,8 @@ public abstract class EncryptedChannel implements IChannel{
         }
     }
 
-    protected static final String ALGORITHM_AES = "ALGORITHM_AES/CTR/NoPadding";
-    protected static final String ALGORITHM_RSA = "ALGORITHM_RSA/NONE/OAEPWithSHA256AndMGF1Padding";
+    protected static final String ALGORITHM_AES = "AES/CTR/NoPadding";
+    protected static final String ALGORITHM_RSA = "RSA/NONE/OAEPWithSHA256AndMGF1Padding";
 
     private IChannel channel;
     private boolean authenticated;

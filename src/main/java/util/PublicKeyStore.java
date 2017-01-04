@@ -10,7 +10,7 @@ public class PublicKeyStore implements IPublicKeyStore {
 
     private File keyDir;
 
-    public PublicKeyStore(File keyDir) throws IOException {
+    public PublicKeyStore(File keyDir) {
         this.keyDir = keyDir;
     }
 

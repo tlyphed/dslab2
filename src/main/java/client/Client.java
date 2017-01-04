@@ -5,6 +5,8 @@ import cli.Shell;
 import transport.*;
 import util.Config;
 import util.IPrivateKeyStore;
+import util.Keys;
+import util.PrivateKeyStore;
 
 import java.io.*;
 import java.net.*;
@@ -47,38 +49,38 @@ public class Client implements IClientCli, Runnable {
 
         shell = new Shell(componentName, userRequestStream, userResponseStream);
         shell.register(this);
-
-        IPrivateKeyStore keyStore = null;
-        PublicKey chatserverKey = null;
-
-        channelConnection = new EncryptedChannelConnection(new EncryptedChannelClient(new TCPChannel("localhost", tcpPort), keyStore, chatserverKey));
-        channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
-            @Override
-            public void onResponse(String response) {
-                Client.this.onResponse(response);
-            }
-        });
-
     }
 
     @Override
     public void run() {
         Thread.currentThread().setName("ClientThread");
 
-        Thread shellThread = new Thread(shell);
-        shellThread.setName("ShellThread");
-        shellThread.start();
-
-        Thread channelConnectionThread = new Thread(channelConnection);
-        channelConnectionThread.setName("ChannelConnectionThread");
-        channelConnectionThread.start();
-
         try {
-            channelConnectionThread.join();
-        } catch (InterruptedException e) {
-        }
+            IPrivateKeyStore keyStore = new PrivateKeyStore(new File(config.getString("keys.dir")));
+            PublicKey chatserverKey = Keys.readPublicPEM(new File(config.getString("chatserver.key")));
 
-        try {
+            channelConnection = new EncryptedChannelConnection(new EncryptedChannelClient(new TCPChannel("localhost", tcpPort), keyStore, chatserverKey));
+            channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
+                @Override
+                public void onResponse(String response) {
+                    Client.this.onResponse(response);
+                }
+            });
+
+            Thread shellThread = new Thread(shell);
+            shellThread.setName("ShellThread");
+            shellThread.start();
+
+            Thread channelConnectionThread = new Thread(channelConnection);
+            channelConnectionThread.setName("ChannelConnectionThread");
+            channelConnectionThread.start();
+
+            try {
+                channelConnectionThread.join();
+            } catch (InterruptedException e) {
+            }
+
+
             exit();
         } catch (IOException e) {
             e.printStackTrace();
@@ -95,7 +97,7 @@ public class Client implements IClientCli, Runnable {
             } else {
                 shell.writeLine(msg);
             }
-        } catch (IOException e){
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
@@ -204,7 +206,7 @@ public class Client implements IClientCli, Runnable {
             String addr[] = privateAddress.split(":");
             InetAddress.getByName(addr[0]);
             final int port = Integer.parseInt(addr[1]);
-            if(!AbstractTCPServer.checkPort(port)){
+            if (!AbstractTCPServer.checkPort(port)) {
                 shell.writeLine("Port already used.");
                 return;
             }
