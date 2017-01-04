@@ -9,17 +9,20 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.*;
 
+import cli.Command;
 import cli.Shell;
 import nameserver.exceptions.AlreadyRegisteredException;
 import nameserver.exceptions.InvalidDomainException;
 import util.Config;
+import util.NullOutputStream;
 
 /**
  * Please note that this class is not needed for Lab 1, but will later be used
  * in Lab 2. Hence, you do not have to implement it for the first submission.
  */
-public class Nameserver implements INameserverCli, INameserver,INameserverForChatserver, Runnable {
+public class Nameserver implements INameserverCli,INameserver, Runnable {
 
 	private String componentName;
 	private Config config;
@@ -28,7 +31,7 @@ public class Nameserver implements INameserverCli, INameserver,INameserverForCha
 	private Registry registry;
 	private INameserver rootNS;
 	private Shell shell;
-
+	private Map<String,NameserverEntry> nameServers;
 	/**
 	 * @param componentName
 	 *            the name of the component - represented in the prompt
@@ -45,11 +48,22 @@ public class Nameserver implements INameserverCli, INameserver,INameserverForCha
 		this.config = config;
 		this.userRequestStream = userRequestStream;
 		this.userResponseStream = userResponseStream;
+		nameServers=new TreeMap<>();
 
+		//Register Shell
 		shell = new Shell(componentName, userRequestStream, userResponseStream);
-
 		shell.register(this);
+	}
 
+	@Override
+	public void run() {
+
+		//Start Shellthread
+		Thread shellThread = new Thread(shell);
+		shellThread.setName("ShellThread");
+		shellThread.start();
+
+		// TODO
 		//If the config does not contain "domain" this Nameserver is the root-ns
 		if(!config.listKeys().contains("domain")){
 			try {
@@ -82,36 +96,44 @@ public class Nameserver implements INameserverCli, INameserver,INameserverForCha
 				rootNS = (INameserver) registry.lookup(config
 						.getString("root_id"));
 
+				rootNS.registerNameserver(config.getString("domain"),(INameserver) UnicastRemoteObject
+						.exportObject(this, 0),this);
+
 			} catch (RemoteException e) {
 				throw new RuntimeException(
 						"Error while obtaining registry/server-remote-object.", e);
 			} catch (NotBoundException e) {
 				throw new RuntimeException(
 						"Error while looking for server-remote-object.", e);
+			} catch (AlreadyRegisteredException e) {
+				userResponseStream.println("The domain of this Nameserver is already registered");
+			} catch (InvalidDomainException e) {
+				userResponseStream.println("The domain of this Nameserver is invalid");
 			}
 		}
-
-		// TODO
 	}
 
 	@Override
-	public void run() {
-		// TODO
-	}
-
-	@Override
+	@Command
 	public String nameservers() throws IOException {
 		// TODO Auto-generated method stub
+		int i=1;
+		for(String k : nameServers.keySet()){
+			userResponseStream.println(i+". "+k);
+			i++;
+		}
 		return null;
 	}
 
 	@Override
+	@Command
 	public String addresses() throws IOException {
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
+	@Command
 	public String exit() throws IOException {
 		// TODO Auto-generated method stub
 		return null;
@@ -125,11 +147,29 @@ public class Nameserver implements INameserverCli, INameserver,INameserverForCha
 	public static void main(String[] args) {
 		Nameserver nameserver = new Nameserver(args[0], new Config(args[0]),
 				System.in, System.out);
+		nameserver.run();
 		// TODO: start the nameserver
 	}
 
 	@Override
 	public void registerNameserver(final String domain, final INameserver nameserver, final INameserverForChatserver nameserverForChatserver) throws RemoteException, AlreadyRegisteredException, InvalidDomainException {
+
+		List<String> domains = new ArrayList<>(Arrays.asList(domain.split("\\.")));
+		userResponseStream.println("Registering domain "+domain);
+		if(domains.size()==1){
+			userResponseStream.println("Registered domain "+domain);
+			//Register domain by saving the RMI objects in local storage
+			nameServers.put(domain,new NameserverEntry(nameserver,nameserverForChatserver));
+		}
+		else if(domains.size()>1){
+			userResponseStream.println("Passing register request to "+domains.get(domains.size()-1));
+
+			//Pass the request on to the next domain level
+			INameserver topDomain = nameServers.get(domains.get(domains.size()-1)).getNameserver();
+			domains.remove(domains.size()-1);
+			topDomain.registerNameserver(rebuildDomainFromList(domains),nameserver,nameserverForChatserver);
+			//Todo: throw exception if request can't be passed on
+		}
 
 	}
 
@@ -146,5 +186,25 @@ public class Nameserver implements INameserverCli, INameserver,INameserverForCha
 	@Override
 	public String lookup(final String username) throws RemoteException {
 		return "serverresponse";
+	}
+
+	/**
+	 * Rebuilds the Domain-String out of the split list
+	 * e.g.: {"vienna","at"} to "vienna.at"
+	 * @param list
+	 * 		list containing the subdomains
+	 * @return
+	 * 		String of the rebuit subdomains
+     */
+	private String rebuildDomainFromList(List<String> list){
+		if(list.size()<=0){
+			return "";
+		}
+		String ret=list.get(0);
+		for(int i=1;i<list.size();i++){
+				ret+="."+list.get(i);
+		}
+		return ret;
+
 	}
 }
