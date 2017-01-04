@@ -14,12 +14,17 @@ public class EncryptedChannelServer extends EncryptedChannel {
     private IChannel channel;
     private PrivateKey chatserverPrivateKey;
     private IPublicKeyStore keyStore;
+    private String username;
 
     public EncryptedChannelServer(IChannel channel, IPublicKeyStore keyStore, PrivateKey chatserverPrivateKey) {
         super(channel);
         this.channel = channel;
         this.chatserverPrivateKey = chatserverPrivateKey;
         this.keyStore = keyStore;
+    }
+
+    public String getUsername() {
+        return username;
     }
 
     @Override
@@ -48,6 +53,8 @@ public class EncryptedChannelServer extends EncryptedChannel {
                 }
 
                 String user = authMsgArgs[1];
+
+                username = user;
 
                 PublicKey publicKey = keyStore.getPublicKey(user);
 

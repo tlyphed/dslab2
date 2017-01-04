@@ -104,27 +104,6 @@ public class Client implements IClientCli, Runnable {
 
     @Override
     @Command
-    public void login(final String username, String password) throws IOException {
-        channelConnection.writeToServer("login " + username + " " + password, false, new ChannelConnection.ResponseListener() {
-            @Override
-            public void onResponse(String response) {
-                if (response.equals("Successfully logged in.")) {
-                    Client.this.username = username;
-                }
-            }
-        });
-    }
-
-    @Override
-    @Command
-    public void logout() throws IOException {
-        channelConnection.writeToServer("logout");
-        username = null;
-        tcpServer.shutdown();
-    }
-
-    @Override
-    @Command
     public void send(String message) throws IOException {
         channelConnection.writeToServer("send " + message);
     }
