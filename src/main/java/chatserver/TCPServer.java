@@ -1,16 +1,23 @@
 package chatserver;
 
 import transport.AbstractTCPServer;
-import transport.EncryptedChannel;
+import transport.EncryptedChannelServer;
 import transport.IChannel;
+import util.IPublicKeyStore;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.security.PrivateKey;
 
 public class TCPServer extends AbstractTCPServer {
 
-    public TCPServer(int port){
+    private IPublicKeyStore keyStore;
+    private PrivateKey chatserverKey;
+
+    public TCPServer(int port, IPublicKeyStore keyStore, PrivateKey chatserverKey){
         super(port);
+        this.keyStore = keyStore;
+        this.chatserverKey = chatserverKey;
     }
 
     private void send(String message, TCPWorker sender) throws IOException {
@@ -23,7 +30,7 @@ public class TCPServer extends AbstractTCPServer {
 
     @Override
     protected IChannel wrapSocket(Socket socket) {
-        return new EncryptedChannel(super.wrapSocket(socket), EncryptedChannel.Mode.SERVER, new ServerKeyStore());
+        return new EncryptedChannelServer(super.wrapSocket(socket), keyStore, chatserverKey);
     }
 
     protected void processInput(TCPWorker worker, IChannel channel) throws IOException {

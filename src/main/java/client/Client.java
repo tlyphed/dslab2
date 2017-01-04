@@ -4,9 +4,11 @@ import cli.Command;
 import cli.Shell;
 import transport.*;
 import util.Config;
+import util.IPrivateKeyStore;
 
 import java.io.*;
 import java.net.*;
+import java.security.PublicKey;
 
 public class Client implements IClientCli, Runnable {
 
@@ -46,7 +48,10 @@ public class Client implements IClientCli, Runnable {
         shell = new Shell(componentName, userRequestStream, userResponseStream);
         shell.register(this);
 
-        channelConnection = new EncryptedChannelConnection(new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT, new ClientKeyStore()));
+        IPrivateKeyStore keyStore = null;
+        PublicKey chatserverKey = null;
+
+        channelConnection = new EncryptedChannelConnection(new EncryptedChannelClient(new TCPChannel("localhost", tcpPort), keyStore, chatserverKey));
         channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
