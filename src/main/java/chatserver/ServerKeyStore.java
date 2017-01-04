@@ -17,6 +17,6 @@ class ServerKeyStore implements IKeyStore {
 
     @Override
     public PublicKey getPublicKey(String username) throws IOException {
-        return Keys.readPublicPEM(new File("keys/client/bill.de.pub.pem"));
+        return Keys.readPublicPEM(new File("keys/chatserver/bill.de.pub.pem"));
     }
 }

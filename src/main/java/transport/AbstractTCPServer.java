@@ -112,10 +112,16 @@ public abstract class AbstractTCPServer implements Runnable {
                     readingThread.join();
                 } catch (InterruptedException e) {
                 }
+
             } catch (IOException e) {
                 e.printStackTrace();
+            } finally {
+                try {
+                    channel.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
-
 
             workers.remove(this);
 

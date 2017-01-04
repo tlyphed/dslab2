@@ -271,7 +271,7 @@ public class Client implements IClientCli, Runnable {
     @Command
     public void authenticate(String username) throws IOException {
         channel.authenticate(username);
-        channelConnection.setListening(true);
+        channelConnection.startListening();
     }
 
 }

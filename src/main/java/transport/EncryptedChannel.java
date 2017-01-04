@@ -82,7 +82,7 @@ public class EncryptedChannel implements IChannel{
                 throw new AuthException("malformed server response");
             }
 
-            String clientChallenge = new String(Base64.decode(serverResponseArgs[1].getBytes()));
+            String clientChallenge = serverResponseArgs[1];
 
             if(!clientChallenge.equals(challenge)){
                 throw new AuthException("client challenge doesn't match");
@@ -123,11 +123,17 @@ public class EncryptedChannel implements IChannel{
     }
 
     private String encrypt(String msg) throws BadPaddingException, IllegalBlockSizeException {
+        if(msg == null){
+            return null;
+        }
         return new String(Base64.encode(aesEncrypt.doFinal(msg.getBytes())));
     }
 
     private String decrypt(String msg) throws BadPaddingException, IllegalBlockSizeException {
-        return new String(Base64.encode(aesDecrypt.doFinal(msg.getBytes())));
+        if(msg == null){
+            return null;
+        }
+        return new String(aesDecrypt.doFinal(Base64.decode(msg)));
     }
 
 
@@ -176,7 +182,7 @@ public class EncryptedChannel implements IChannel{
                 rsa.init(Cipher.ENCRYPT_MODE, publicKey);
 
                 String serverResponsePlain = "!ok " + clientChallenge + " " + serverChallenge + " " + secretKey + " " + ivParameter;
-                String serverResponseCipher = new String(rsa.doFinal(Base64.encode(serverResponsePlain.getBytes())));
+                String serverResponseCipher = new String(Base64.encode(rsa.doFinal(serverResponsePlain.getBytes())));
 
                 channel.write(serverResponseCipher);
 
@@ -188,41 +194,37 @@ public class EncryptedChannel implements IChannel{
                     throw new AuthException("server challenge doesn't match");
                 }
 
+                authenticated = true;
+
             } catch (NoSuchAlgorithmException | InvalidKeyException | NoSuchPaddingException | BadPaddingException |
                     IllegalBlockSizeException | InvalidAlgorithmParameterException e) {
                 throw new AuthException(e);
             }
-
-            authenticated = true;
         }
     }
 
     @Override
     public void close() throws IOException {
-        if(!authenticated){
-            throw new IllegalStateException("authenticate first!");
-        }
-
         channel.close();
     }
 
     @Override
     public void write(String msg) throws IOException {
         if(!authenticated){
-            throw new IllegalStateException("authenticate first!");
-        }
-
-        try {
-            channel.write(encrypt(msg));
-        } catch (BadPaddingException | IllegalBlockSizeException e) {
-            throw new IOException("encryption error", e);
+            channel.write(msg);
+        } else {
+            try {
+                channel.write(encrypt(msg));
+            } catch (BadPaddingException | IllegalBlockSizeException e) {
+                throw new IOException("encryption error", e);
+            }
         }
     }
 
     @Override
     public String read() throws IOException {
         if(!authenticated){
-            throw new IllegalStateException("authenticate first!");
+            throw new AuthException("not authenticated");
         }
 
         try {

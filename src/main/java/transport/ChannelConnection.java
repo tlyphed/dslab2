@@ -3,7 +3,7 @@ package transport;
 import java.io.IOException;
 import java.util.concurrent.Semaphore;
 
-public class ChannelConnection implements Runnable{
+public class ChannelConnection implements Runnable {
 
     private Thread readingThread;
 
@@ -15,20 +15,22 @@ public class ChannelConnection implements Runnable{
 
     private String lastResponse;
 
-    private boolean listening = false;
-
     private final Semaphore available = new Semaphore(1, true);
 
     private boolean silentMode = false;
 
     private ResponseListener responseListener;
 
-    public ChannelConnection(IChannel channel){
+    public ChannelConnection(IChannel channel) {
         this.channel = channel;
+        try {
+            available.acquire();
+        } catch (InterruptedException e) {
+        }
     }
 
     @Override
-    public void run(){
+    public void run() {
         try {
             channel.open();
 
@@ -37,9 +39,7 @@ public class ChannelConnection implements Runnable{
                 public void run() {
                     Thread.currentThread().setName("ReadingThread");
                     try {
-                        if(listening){
-                            processInput();
-                        }
+                        processInput();
                     } catch (IOException | InterruptedException e) {
                         if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
                             e.printStackTrace();
@@ -70,7 +70,7 @@ public class ChannelConnection implements Runnable{
             available.acquire();
             if ((line = channel.read()) != null) {
                 lastResponse = line;
-                if(!silentMode){
+                if (!silentMode) {
                     fireResponseEvent(line);
                 }
             } else {
@@ -80,8 +80,8 @@ public class ChannelConnection implements Runnable{
         }
     }
 
-    private void fireResponseEvent(String msg){
-        if(responseListener != null){
+    private void fireResponseEvent(String msg) {
+        if (responseListener != null) {
             responseListener.onResponse(msg);
         }
     }
@@ -113,11 +113,7 @@ public class ChannelConnection implements Runnable{
         writeToServer(msg);
     }
 
-    public void setListening(boolean listening) {
-        this.listening = listening;
-    }
-
-    public boolean isListening() {
-        return listening;
+    public void startListening() {
+        available.release();
     }
 }
