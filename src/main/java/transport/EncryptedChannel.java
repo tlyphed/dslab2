@@ -98,6 +98,12 @@ public class EncryptedChannel implements IChannel{
 
             channel.write(clientResponse);
 
+            String serverCheck = new String(decode(channel.read()));
+
+            if(!serverCheck.equals("Success")){
+                throw new AuthException("auth failed");
+            }
+
         } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchPaddingException |
                 InvalidKeyException | BadPaddingException | IllegalBlockSizeException e) {
             throw new AuthException(e);
@@ -122,18 +128,32 @@ public class EncryptedChannel implements IChannel{
         aesDecrypt.init(Cipher.DECRYPT_MODE, secretKey, ivParameter);
     }
 
+    private String encode(byte[] msg) {
+        if(msg == null){
+            return null;
+        }
+        return new String(Base64.encode(msg));
+    }
+
+    private byte[] decode(String msg) {
+        if(msg == null){
+            return null;
+        }
+        return Base64.decode(msg);
+    }
+
     private String encrypt(String msg) throws BadPaddingException, IllegalBlockSizeException {
         if(msg == null){
             return null;
         }
-        return new String(Base64.encode(aesEncrypt.doFinal(msg.getBytes())));
+        return encode(aesEncrypt.doFinal(msg.getBytes()));
     }
 
     private String decrypt(String msg) throws BadPaddingException, IllegalBlockSizeException {
         if(msg == null){
             return null;
         }
-        return new String(aesDecrypt.doFinal(Base64.decode(msg)));
+        return new String(aesDecrypt.doFinal(decode(msg)));
     }
 
 
@@ -144,62 +164,77 @@ public class EncryptedChannel implements IChannel{
         if(mode == Mode.SERVER){
             PrivateKey privateKey = keyStore.getPrivateKey("chatserver");
 
-            try {
-                Cipher rsa = Cipher.getInstance(RSA);
-                rsa.init(Cipher.DECRYPT_MODE, privateKey);
+            while(!Thread.interrupted()){
+                try {
+                    Cipher rsa = Cipher.getInstance(RSA);
+                    rsa.init(Cipher.DECRYPT_MODE, privateKey);
 
-                String authMsgCipher = channel.read();
+                    String authMsgCipher = channel.read();
 
-                String authMsgPlain = new String(rsa.doFinal(Base64.decode(authMsgCipher.getBytes())));
+                    if(authMsgCipher == null) {
+                        throw new IOException("Client socket closed");
+                    }
 
-                String[] authMsgArgs = authMsgPlain.split(" ");
+                    String authMsgPlain = new String(rsa.doFinal(Base64.decode(authMsgCipher.getBytes())));
 
-                if(authMsgArgs.length != 3 || !authMsgArgs[0].equals("!authenticate")){
-                    throw new AuthException("malformed client auth request");
+                    String[] authMsgArgs = authMsgPlain.split(" ");
+
+                    if(authMsgArgs.length != 3 || !authMsgArgs[0].equals("!authenticate")){
+                        throw new AuthException("malformed client auth request");
+                    }
+
+                    String user = new String(Base64.decode(authMsgArgs[1]));
+
+                    PublicKey publicKey = keyStore.getPublicKey(user);
+
+                    if(publicKey == null){
+                        throw new AuthException("public key for '" + user + "' not found");
+                    }
+
+                    String clientChallenge = authMsgArgs[2];
+
+                    String serverChallenge = generateEncodedRandom(32);
+
+                    KeyGenerator generator = KeyGenerator.getInstance("AES");
+                    generator.init(32 * 8);
+                    SecretKey key = generator.generateKey();
+
+                    String secretKey = new String(Base64.encode(key.getEncoded()));
+                    String ivParameter = generateEncodedRandom(16);
+
+                    setUpAES(new SecretKeySpec(key.getEncoded(), "AES"), new IvParameterSpec(Base64.decode(ivParameter.getBytes())));
+
+                    rsa.init(Cipher.ENCRYPT_MODE, publicKey);
+
+                    String serverResponsePlain = "!ok " + clientChallenge + " " + serverChallenge + " " + secretKey + " " + ivParameter;
+                    String serverResponseCipher = new String(Base64.encode(rsa.doFinal(serverResponsePlain.getBytes())));
+
+                    channel.write(serverResponseCipher);
+
+                    String challengeCipher = channel.read();
+
+                    String challenge = decrypt(challengeCipher);
+
+                    if(!serverChallenge.equals(challenge)){
+                        throw new AuthException("server challenge doesn't match");
+                    }
+
+                    authenticated = true;
+
+                    channel.write(encode("Success".getBytes()));
+
+                    break;
+
+                } catch (NoSuchAlgorithmException | InvalidKeyException | NoSuchPaddingException | BadPaddingException |
+                        IllegalBlockSizeException | InvalidAlgorithmParameterException e) {
+                    channel.write(encode("Permission denied".getBytes()));
+                } catch (AuthException e) {
+                    channel.write(encode("Authentification failed".getBytes()));
                 }
 
-                String user = new String(Base64.decode(authMsgArgs[1]));
-
-                PublicKey publicKey = keyStore.getPublicKey(user);
-
-                if(publicKey == null){
-                    throw new AuthException("public key for '" + user + "' not found");
-                }
-
-                String clientChallenge = authMsgArgs[2];
-
-                String serverChallenge = generateEncodedRandom(32);
-
-                KeyGenerator generator = KeyGenerator.getInstance("AES");
-                generator.init(32 * 8);
-                SecretKey key = generator.generateKey();
-
-                String secretKey = new String(Base64.encode(key.getEncoded()));
-                String ivParameter = generateEncodedRandom(16);
-
-                setUpAES(new SecretKeySpec(key.getEncoded(), "AES"), new IvParameterSpec(Base64.decode(ivParameter.getBytes())));
-
-                rsa.init(Cipher.ENCRYPT_MODE, publicKey);
-
-                String serverResponsePlain = "!ok " + clientChallenge + " " + serverChallenge + " " + secretKey + " " + ivParameter;
-                String serverResponseCipher = new String(Base64.encode(rsa.doFinal(serverResponsePlain.getBytes())));
-
-                channel.write(serverResponseCipher);
-
-                String challengeCipher = channel.read();
-
-                String challenge = decrypt(challengeCipher);
-
-                if(!challenge.equals(serverChallenge)){
-                    throw new AuthException("server challenge doesn't match");
-                }
-
-                authenticated = true;
-
-            } catch (NoSuchAlgorithmException | InvalidKeyException | NoSuchPaddingException | BadPaddingException |
-                    IllegalBlockSizeException | InvalidAlgorithmParameterException e) {
-                throw new AuthException(e);
             }
+
+
         }
     }
 
@@ -211,7 +246,7 @@ public class EncryptedChannel implements IChannel{
     @Override
     public void write(String msg) throws IOException {
         if(!authenticated){
-            channel.write(msg);
+            channel.write(encode(msg.getBytes()));
         } else {
             try {
                 channel.write(encrypt(msg));
@@ -224,13 +259,17 @@ public class EncryptedChannel implements IChannel{
     @Override
     public String read() throws IOException {
         if(!authenticated){
-            throw new AuthException("not authenticated");
+            return new String(decode(channel.read()));
+        } else {
+            try {
+                return decrypt(channel.read());
+            } catch (BadPaddingException | IllegalBlockSizeException e) {
+                throw new IOException("decryption error", e);
+            }
         }
+    }
 
-        try {
-            return decrypt(channel.read());
-        } catch (BadPaddingException | IllegalBlockSizeException e) {
-            throw new IOException("decryption error", e);
-        }
+    public boolean isAuthenticated() {
+        return authenticated;
     }
 }

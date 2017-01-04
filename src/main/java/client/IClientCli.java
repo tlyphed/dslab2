@@ -131,6 +131,6 @@ public interface IClientCli {
 	 * @throws IOException
 	 *             if an I/O error occurs
 	 */
-	public void authenticate(String username) throws IOException;
+	public String authenticate(String username) throws IOException;
 
 }

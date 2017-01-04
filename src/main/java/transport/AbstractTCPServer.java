@@ -114,7 +114,9 @@ public abstract class AbstractTCPServer implements Runnable {
                 }
 
             } catch (IOException e) {
-                e.printStackTrace();
+                if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed") || e.getMessage().equals("Client socket closed"))) {
+                    e.printStackTrace();
+                }
             } finally {
                 try {
                     channel.close();

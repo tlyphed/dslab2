@@ -1,7 +1,6 @@
 package chatserver;
 
 import transport.AbstractTCPServer;
-import transport.Base64Channel;
 import transport.EncryptedChannel;
 import transport.IChannel;
 
@@ -24,7 +23,7 @@ public class TCPServer extends AbstractTCPServer {
 
     @Override
     protected IChannel wrapSocket(Socket socket) {
-        return new Base64Channel(new EncryptedChannel(super.wrapSocket(socket), EncryptedChannel.Mode.SERVER, new ServerKeyStore()));
+        return new EncryptedChannel(super.wrapSocket(socket), EncryptedChannel.Mode.SERVER, new ServerKeyStore());
     }
 
     protected void processInput(TCPWorker worker, IChannel channel) throws IOException {

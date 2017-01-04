@@ -23,45 +23,45 @@ public class ChannelConnection implements Runnable {
 
     public ChannelConnection(IChannel channel) {
         this.channel = channel;
-        try {
-            available.acquire();
-        } catch (InterruptedException e) {
-        }
+        this.readingThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Thread.currentThread().setName("ReadingThread");
+                try {
+                    processInput();
+                } catch (IOException | InterruptedException e) {
+                    if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
     }
 
     @Override
     public void run() {
         try {
-            channel.open();
+            available.acquire();
 
-            readingThread = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    Thread.currentThread().setName("ReadingThread");
-                    try {
-                        processInput();
-                    } catch (IOException | InterruptedException e) {
-                        if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            });
+            open();
 
             readingThread.start();
+
+            readingThread.join();
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (InterruptedException e) {
         }
+    }
 
-
+    protected void open() throws IOException{
+        channel.open();
+        startReadingThread();
     }
 
     public void close() throws IOException {
+        available.release();
         channel.close();
-        try {
-            readingThread.join();
-        } catch (InterruptedException e) {
-        }
     }
 
     private void processInput() throws IOException, InterruptedException {
@@ -80,7 +80,7 @@ public class ChannelConnection implements Runnable {
         }
     }
 
-    private void fireResponseEvent(String msg) {
+    protected void fireResponseEvent(String msg) {
         if (responseListener != null) {
             responseListener.onResponse(msg);
         }
@@ -113,7 +113,7 @@ public class ChannelConnection implements Runnable {
         writeToServer(msg);
     }
 
-    public void startListening() {
+    public void startReadingThread() {
         available.release();
     }
 }

@@ -17,8 +17,7 @@ public class Client implements IClientCli, Runnable {
 
     private Shell shell;
 
-    private EncryptedChannel channel;
-    private ChannelConnection channelConnection;
+    private EncryptedChannelConnection channelConnection;
 
     private int tcpPort;
     private int udpPort;
@@ -47,9 +46,7 @@ public class Client implements IClientCli, Runnable {
         shell = new Shell(componentName, userRequestStream, userResponseStream);
         shell.register(this);
 
-        //channelConnection = new ChannelConnection(new TCPChannel("localhost", tcpPort));
-        channel = new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT, new ClientKeyStore());
-        channelConnection = new ChannelConnection(new Base64Channel(channel));
+        channelConnection = new EncryptedChannelConnection(new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT, new ClientKeyStore()));
         channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
@@ -70,6 +67,17 @@ public class Client implements IClientCli, Runnable {
         Thread channelConnectionThread = new Thread(channelConnection);
         channelConnectionThread.setName("ChannelConnectionThread");
         channelConnectionThread.start();
+
+        try {
+            channelConnectionThread.join();
+        } catch (InterruptedException e) {
+        }
+
+        try {
+            exit();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void onResponse(String msg) {
@@ -87,18 +95,10 @@ public class Client implements IClientCli, Runnable {
         }
     }
 
-    private void writeToServer(String msg) throws IOException {
-        channelConnection.writeToServer(msg);
-    }
-
-    private void writeToServer(String msg, final boolean silent, final ChannelConnection.ResponseListener callback) throws IOException {
-        channelConnection.writeToServer(msg, silent, callback);
-    }
-
     @Override
     @Command
     public void login(final String username, String password) throws IOException {
-        writeToServer("login " + username + " " + password, false, new ChannelConnection.ResponseListener() {
+        channelConnection.writeToServer("login " + username + " " + password, false, new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
                 if (response.equals("Successfully logged in.")) {
@@ -111,7 +111,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void logout() throws IOException {
-        writeToServer("logout");
+        channelConnection.writeToServer("logout");
         username = null;
         tcpServer.shutdown();
     }
@@ -119,7 +119,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void send(String message) throws IOException {
-        writeToServer("send " + message);
+        channelConnection.writeToServer("send " + message);
     }
 
     @Override
@@ -154,7 +154,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void msg(final String username, final String message) throws IOException {
-        writeToServer("lookup " + username, true, new ChannelConnection.ResponseListener() {
+        channelConnection.writeToServer("lookup " + username, true, new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
                 try {
@@ -189,7 +189,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void lookup(String username) throws IOException {
-        writeToServer("lookup " + username);
+        channelConnection.writeToServer("lookup " + username);
     }
 
     @Override
@@ -203,7 +203,7 @@ public class Client implements IClientCli, Runnable {
                 shell.writeLine("Port already used.");
                 return;
             }
-            writeToServer("register " + privateAddress, false, new ChannelConnection.ResponseListener() {
+            channelConnection.writeToServer("register " + privateAddress, false, new ChannelConnection.ResponseListener() {
                 @Override
                 public void onResponse(String response) {
                     if (response.equals("Successfully registered.")) {
@@ -246,6 +246,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void exit() throws IOException {
+        channelConnection.close();
         if (tcpServer != null) {
             tcpServer.shutdown();
         }
@@ -269,9 +270,14 @@ public class Client implements IClientCli, Runnable {
 
     @Override
     @Command
-    public void authenticate(String username) throws IOException {
-        channel.authenticate(username);
-        channelConnection.startListening();
+    public String authenticate(String username) throws IOException {
+        try {
+            channelConnection.authenticate(username);
+
+            return "Success";
+        } catch (EncryptedChannel.AuthException e) {
+            return e.getMessage();
+        }
     }
 
 }
