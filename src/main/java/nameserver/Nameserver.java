@@ -112,7 +112,7 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
             } catch (AlreadyRegisteredException e) {
                 userResponseStream.println("The domain of this Nameserver is already registered");
             } catch (InvalidDomainException e) {
-                userResponseStream.println("The domain of this Nameserver is invalid");
+                userResponseStream.println(e);
             }
         }
     }
@@ -197,21 +197,28 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
     public void registerNameserver(final String domain, final INameserver nameserver, final INameserverForChatserver nameserverForChatserver) throws RemoteException, AlreadyRegisteredException, InvalidDomainException {
 
         List<String> domains = DomainUtil.splitDomainIntoParts(domain);
-        userResponseStream.println("Registering domain " + domain);
         if (domains.size() == 1) {
-            userResponseStream.println("Registered domain " + domain);
+
+
             //Register domain by saving the RMI objects in local storage
             if(nameServers.putIfAbsent(domain, new NameserverEntry(nameserver, nameserverForChatserver)) != null){
+                userResponseStream.println("Domain '"+domain+"' is already registered");
                 throw new AlreadyRegisteredException(domain);
             }
+            userResponseStream.println("Registered domain " + domain);
         } else if (domains.size() > 1) {
-            userResponseStream.println("Passing register request to " + domains.get(domains.size() - 1));
+
+            if(!nameServers.containsKey(domains.get(domains.size() - 1))){
+                userResponseStream.println("Register request rejected; '"+domain+"' is invalid");
+                throw new InvalidDomainException("'"+domain+"' can't be registered; Domain '"+domains.get(domains.size() - 1)+"' doesn't exist");
+            }
+            INameserver topDomain = nameServers.get(domains.get(domains.size() - 1)).getNameserver();
 
             //Pass the request on to the next domain level
-            INameserver topDomain = nameServers.get(domains.get(domains.size() - 1)).getNameserver();
+            userResponseStream.println("Passing register request to " + domains.get(domains.size() - 1));
             domains.remove(domains.size() - 1);
             topDomain.registerNameserver(rebuildDomainFromList(domains), nameserver, nameserverForChatserver);
-            //Todo: throw exception if request can't be passed on
+
         }
 
     }
