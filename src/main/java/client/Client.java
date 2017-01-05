@@ -10,6 +10,7 @@ import util.PrivateKeyStore;
 
 import java.io.*;
 import java.net.*;
+import java.security.Key;
 import java.security.PublicKey;
 
 public class Client implements IClientCli, Runnable {
@@ -31,6 +32,8 @@ public class Client implements IClientCli, Runnable {
     private AbstractTCPServer tcpServer;
 
     private String username = null;
+
+    private Key secretKey;
 
     /**
      * @param componentName      the name of the component - represented in the prompt
@@ -58,6 +61,7 @@ public class Client implements IClientCli, Runnable {
         try {
             IPrivateKeyStore keyStore = new PrivateKeyStore(new File(config.getString("keys.dir")));
             PublicKey chatserverKey = Keys.readPublicPEM(new File(config.getString("chatserver.key")));
+            secretKey = Keys.readSecretKey(new File(config.getString("hmac.key")));
 
             channelConnection = new EncryptedChannelConnection(new EncryptedChannelClient(new TCPChannel("localhost", tcpPort), keyStore, chatserverKey));
             channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
@@ -151,19 +155,17 @@ public class Client implements IClientCli, Runnable {
                     } else {
                         String addr[] = response.split(":");
 
-                        try (Socket socket = new Socket(addr[0], Integer.parseInt(addr[1]));
-                             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
+                        HmacChannel channel = new HmacChannel(new TCPChannel(addr[0], Integer.parseInt(addr[1])), secretKey);
+                        channel.open();
+                        channel.write(username + ": " + message);
+                        try {
+                            String reply = channel.read();
+                            shell.writeLine(username + " replied with '" + reply + "'");
 
-                            out.write(username + ": " + message);
-                            out.newLine();
-                            out.flush();
-
-                            String ack = in.readLine();
-                            if (ack.equals("!ack")) {
-                                shell.writeLine(username + " replied with ack!");
-                            }
+                        } catch (HmacChannel.MessageTamperedException e){
+                            shell.writeLine("received tampered message (" + e.getTamperedMsg() + ")");
                         }
+
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -200,9 +202,19 @@ public class Client implements IClientCli, Runnable {
                             tcpServer = new AbstractTCPServer(port) {
                                 @Override
                                 protected void processInput(TCPWorker worker, IChannel channel) throws IOException {
-                                    String line = channel.read();
-                                    shell.writeLine(line);
-                                    channel.write("!ack");
+                                    try {
+                                        String line = channel.read();
+                                        shell.writeLine(line);
+                                        channel.write("!ack");
+                                    } catch (HmacChannel.MessageTamperedException e){
+                                        shell.writeLine("received tampered message (" + e.getTamperedMsg() + ")");
+                                        channel.write("!tampered " + e.getTamperedMsg());
+                                    }
+                                }
+
+                                @Override
+                                protected IChannel wrapSocket(Socket socket) {
+                                    return new HmacChannel(super.wrapSocket(socket), secretKey);
                                 }
                             };
                             Thread listeningThread = new Thread(tcpServer);
