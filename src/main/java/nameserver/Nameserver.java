@@ -40,6 +40,7 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
 
     private String mDomain;
     private boolean isRoot;
+    private Registry registry;
 
     /**
      * @param componentName      the name of the component - represented in the prompt
@@ -79,7 +80,7 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
             try {
                 // create and export the registry instance on localhost at the
                 // specified port
-                Registry registry = LocateRegistry.createRegistry(config
+                registry = LocateRegistry.createRegistry(config
                         .getInt("registry.port"));
 
                 // create a remote object of this server object
@@ -105,7 +106,7 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
                         .exportObject(this, 0), this);
 
             } catch (RemoteException e) {
-                userResponseStream.println("Could not connect to registry, please start the root nameserver");
+                userResponseStream.println("Could not connect to registry or the remote, please start the root nameserver and all parent nameservers!");
             } catch (NotBoundException e) {
                 userResponseStream.println("Fatal: could not bind!" + e.getMessage());
             } catch (AlreadyRegisteredException e) {
@@ -168,8 +169,16 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
     @Override
     @Command
     public String exit() throws IOException {
-
-        // TODO Auto-generated method stub
+        UnicastRemoteObject.unexportObject(this, true);
+        if(isRoot){
+            try {
+                registry.unbind(config.getString("root_id"));
+                UnicastRemoteObject.unexportObject(registry, true);
+            } catch (NotBoundException e) {
+                userResponseStream.println("could not unbind");
+            }
+        }
+        shell.close();
         return null;
     }
 
@@ -180,7 +189,7 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
     public static void main(String[] args) {
         Nameserver nameserver = new Nameserver(args[0], new Config(args[0]),
                 System.in, System.out);
-        nameserver.run();
+        new Thread(nameserver).start();
         // TODO: start the nameserver
     }
 
