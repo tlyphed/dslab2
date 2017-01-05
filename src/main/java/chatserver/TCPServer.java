@@ -1,5 +1,8 @@
 package chatserver;
 
+import nameserver.INameserverForChatserver;
+import nameserver.exceptions.AlreadyRegisteredException;
+import nameserver.exceptions.InvalidDomainException;
 import util.AbstractTCPServer;
 
 import java.io.BufferedReader;
@@ -8,8 +11,13 @@ import java.io.IOException;
 
 public class TCPServer extends AbstractTCPServer {
 
-    public TCPServer(int port){
+    private  final LookupRemoteHelper lookupRemoteHelper;
+    private RegisterRemoteHelper registerHelper;
+
+    public TCPServer(int port, INameserverForChatserver root){
         super(port);
+        this.lookupRemoteHelper = new LookupRemoteHelper(root);
+        this.registerHelper = new RegisterRemoteHelper(root);
     }
 
     private void send(String message, TCPWorker sender) throws IOException {
@@ -107,7 +115,14 @@ public class TCPServer extends AbstractTCPServer {
                         if(user != null){
                             String ipAddress = cmd[1];
                             user.setIpAddress(ipAddress);
-                            out.write("Successfully registered.");
+                            try {
+                                registerHelper.register(user);
+                                out.write("Successfully registered.");
+                            }catch (InvalidDomainException e){
+                                out.write("Invalid Domain!");
+                            }catch (AlreadyRegisteredException a){
+                                out.write("Already registered!");
+                            }
                             out.newLine();
                             out.flush();
                             break;
@@ -125,15 +140,13 @@ public class TCPServer extends AbstractTCPServer {
                     if(cmd.length == 2){
                         if(user != null){
                             String lookupName = cmd[1];
-                            User lookup = UserStore.getInstance().getUser(lookupName);
-                            if(lookup != null){
-                                if(lookup.getIpAddress() != null){
-                                    out.write(lookup.getIpAddress());
+                            String lookupAddress = lookupRemoteHelper.lookupAddress(lookupName);
+                                if(lookupAddress != null){
+                                    out.write(lookupAddress);
                                     out.newLine();
                                     out.flush();
                                     break;
                                 }
-                            }
                             out.write("Wrong username or user not registered.");
                             out.newLine();
                             out.flush();

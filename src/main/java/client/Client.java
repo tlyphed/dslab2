@@ -220,8 +220,7 @@ public class Client implements IClientCli, Runnable {
                         try (Socket socket = new Socket(addr[0], Integer.parseInt(addr[1]));
                              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                              BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
-
-                            out.write(username + ": " + message);
+                            out.write(Client.this.username + ": " + message);
                             out.newLine();
                             out.flush();
 
