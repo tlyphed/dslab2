@@ -2,12 +2,11 @@ package client;
 
 import cli.Command;
 import cli.Shell;
-import util.AbstractTCPServer;
+import transport.*;
 import util.Config;
 
 import java.io.*;
 import java.net.*;
-import java.util.concurrent.Semaphore;
 
 public class Client implements IClientCli, Runnable {
 
@@ -18,18 +17,12 @@ public class Client implements IClientCli, Runnable {
 
     private Shell shell;
 
+    private EncryptedChannelConnection channelConnection;
+
     private int tcpPort;
     private int udpPort;
 
-    private Socket socket;
-    private BufferedReader in;
-    private BufferedWriter out;
-
-    private String lastResponse, lastMsg;
-
-    private final Semaphore available = new Semaphore(1, true);
-
-    private boolean silentMode = false;
+    private String lastMsg;
 
     private AbstractTCPServer tcpServer;
 
@@ -53,6 +46,14 @@ public class Client implements IClientCli, Runnable {
         shell = new Shell(componentName, userRequestStream, userResponseStream);
         shell.register(this);
 
+        channelConnection = new EncryptedChannelConnection(new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT, new ClientKeyStore()));
+        channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
+            @Override
+            public void onResponse(String response) {
+                Client.this.onResponse(response);
+            }
+        });
+
     }
 
     @Override
@@ -63,94 +64,41 @@ public class Client implements IClientCli, Runnable {
         shellThread.setName("ShellThread");
         shellThread.start();
 
-        try (Socket socket = new Socket("localhost", tcpPort);
-             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+        Thread channelConnectionThread = new Thread(channelConnection);
+        channelConnectionThread.setName("ChannelConnectionThread");
+        channelConnectionThread.start();
 
-            this.socket = socket;
-            this.out = out;
-            this.in = in;
+        try {
+            channelConnectionThread.join();
+        } catch (InterruptedException e) {
+        }
 
-            Thread readingThread = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    Thread.currentThread().setName("ReadingThread");
-                    try {
-                        processInput(in, out);
-                    } catch (IOException | InterruptedException e) {
-                        if (!(e.getMessage().equals("Stream closed") || e.getMessage().equals("Socket closed"))) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            });
-
-            readingThread.start();
-
-            try {
-                readingThread.join();
-            } catch (InterruptedException e) {
-            }
-
+        try {
             exit();
-
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void processInput(BufferedReader in, BufferedWriter out) throws IOException, InterruptedException {
-        String line;
-        while (!Thread.currentThread().isInterrupted()) {
-            available.acquire();
-            if ((line = in.readLine()) != null) {
-                if (line.startsWith("!pubmsg: ")) {
-                    lastMsg = line.substring(line.indexOf(":") + 2);
-                    shell.writeLine(lastMsg);
-                } else if (line.equals("exit")) {
-                    exit();
-                } else {
-                    if (!silentMode) {
-                        shell.writeLine(line);
-                    }
-                    lastResponse = line;
-                }
+    private void onResponse(String msg) {
+        try {
+            if (msg.startsWith("!pubmsg: ")) {
+                lastMsg = msg.substring(msg.indexOf(":") + 2);
+                shell.writeLine(lastMsg);
+            } else if (msg.equals("exit")) {
+                exit();
             } else {
-                break;
+                shell.writeLine(msg);
             }
-            available.release();
+        } catch (IOException e){
+            e.printStackTrace();
         }
-    }
-
-    private void writeToServer(String msg) throws IOException {
-        out.write(msg);
-        out.newLine();
-        out.flush();
-    }
-
-    private void writeToServer(String msg, final boolean silent, final Callback callback) throws IOException {
-        silentMode = silent;
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Thread.currentThread().setName("ServerRequestThread");
-                try {
-                    available.acquire();
-                    silentMode = false;
-                    String response = lastResponse;
-                    available.release();
-                    callback.onResponse(response);
-                } catch (InterruptedException e) {
-                }
-            }
-        }).start();
-        writeToServer(msg);
     }
 
     @Override
     @Command
     public void login(final String username, String password) throws IOException {
-        writeToServer("login " + username + " " + password, false, new Callback() {
+        channelConnection.writeToServer("login " + username + " " + password, false, new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
                 if (response.equals("Successfully logged in.")) {
@@ -163,7 +111,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void logout() throws IOException {
-        writeToServer("logout");
+        channelConnection.writeToServer("logout");
         username = null;
         tcpServer.shutdown();
     }
@@ -171,7 +119,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void send(String message) throws IOException {
-        writeToServer("send " + message);
+        channelConnection.writeToServer("send " + message);
     }
 
     @Override
@@ -180,7 +128,7 @@ public class Client implements IClientCli, Runnable {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Thread.currentThread().setName("UPDThread");
+                Thread.currentThread().setName("UDPThread");
                 try {
                     try (DatagramSocket socket = new DatagramSocket()) {
                         byte[] buf = "list".getBytes();
@@ -206,7 +154,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void msg(final String username, final String message) throws IOException {
-        writeToServer("lookup " + username, true, new Callback() {
+        channelConnection.writeToServer("lookup " + username, true, new ChannelConnection.ResponseListener() {
             @Override
             public void onResponse(String response) {
                 try {
@@ -240,7 +188,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void lookup(String username) throws IOException {
-        writeToServer("lookup " + username);
+        channelConnection.writeToServer("lookup " + username);
     }
 
     @Override
@@ -254,7 +202,7 @@ public class Client implements IClientCli, Runnable {
                 shell.writeLine("Port already used.");
                 return;
             }
-            writeToServer("register " + privateAddress, false, new Callback() {
+            channelConnection.writeToServer("register " + privateAddress, false, new ChannelConnection.ResponseListener() {
                 @Override
                 public void onResponse(String response) {
                     if (response.equals("Successfully registered.")) {
@@ -264,12 +212,10 @@ public class Client implements IClientCli, Runnable {
                             }
                             tcpServer = new AbstractTCPServer(port) {
                                 @Override
-                                protected void processInput(TCPWorker worker, BufferedReader in, BufferedWriter out) throws IOException {
-                                    String line = in.readLine();
+                                protected void processInput(TCPWorker worker, IChannel channel) throws IOException {
+                                    String line = channel.read();
                                     shell.writeLine(line);
-                                    out.write("!ack");
-                                    out.newLine();
-                                    out.flush();
+                                    channel.write("!ack");
                                 }
                             };
                             Thread listeningThread = new Thread(tcpServer);
@@ -299,9 +245,7 @@ public class Client implements IClientCli, Runnable {
     @Override
     @Command
     public void exit() throws IOException {
-        if (socket != null && !socket.isClosed()) {
-            socket.close();
-        }
+        channelConnection.close();
         if (tcpServer != null) {
             tcpServer.shutdown();
         }
@@ -323,17 +267,16 @@ public class Client implements IClientCli, Runnable {
         new Thread(client).start();
     }
 
-    // --- Commands needed for Lab 2. Please note that you do not have to
-    // implement them for the first submission. ---
-
     @Override
+    @Command
     public String authenticate(String username) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        try {
+            channelConnection.authenticate(username);
+
+            return "Success";
+        } catch (EncryptedChannel.AuthException e) {
+            return e.getMessage();
+        }
     }
 
-
-    interface Callback {
-        void onResponse(String response);
-    }
 }
