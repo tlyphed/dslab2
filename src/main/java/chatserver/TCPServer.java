@@ -17,13 +17,11 @@ public class TCPServer extends AbstractTCPServer {
     private IPublicKeyStore keyStore;
     private PrivateKey chatserverKey;
     private EncryptedChannelServer channel;
-
-    public TCPServer(int port, IPublicKeyStore keyStore, PrivateKey chatserverKey) {
     private final LookupRemoteHelper lookupRemoteHelper;
-    private RegisterRemoteHelper registerHelper;
-    private EncryptedChannelServer channel;
+    private final RegisterRemoteHelper registerHelper;
 
-    public TCPServer(int port, INameserverForChatserver root) {
+
+    public TCPServer(int port, IPublicKeyStore keyStore, PrivateKey chatserverKey, INameserverForChatserver root) {
         super(port);
         this.lookupRemoteHelper = new LookupRemoteHelper(root);
         this.registerHelper = new RegisterRemoteHelper(root);
@@ -60,21 +58,22 @@ public class TCPServer extends AbstractTCPServer {
                         String msg = line.substring(line.indexOf(" ") + 1);
                         send(user.getName() + ": " + msg, worker);
                         channel.write("Message sent.");
-                    if (cmd.length > 1) {
-
-                        String msg = line.substring(line.indexOf(" ") + 1);
-                        send(user.getName() + ": " + msg, worker);
-                        channel.write("Message sent.");
                         break;
-
                     }
                     channel.write("Wrong argument.");
                     break;
                 case "register":
                     if (cmd.length == 2) {
-                        String ipAddress = cmd[1];
-                        user.setIpAddress(ipAddress);
-                        channel.write("Successfully registered.");
+                        try {
+                            String ipAddress = cmd[1];
+                            user.setIpAddress(ipAddress);
+                            this.registerHelper.register(user);
+                            channel.write("Successfully registered.");
+                        }catch (InvalidDomainException id){
+                            channel.write("Invalid domain");
+                        }catch (AlreadyRegisteredException ae){
+                            channel.write("Already registered");
+                        }
                         break;
 
                     }
@@ -83,12 +82,10 @@ public class TCPServer extends AbstractTCPServer {
                 case "lookup":
                     if (cmd.length == 2) {
                         String lookupName = cmd[1];
-                        User lookup = UserStore.getInstance().getUser(lookupName);
-                        if (lookup != null) {
-                            if (lookup.getIpAddress() != null) {
-                                channel.write(lookup.getIpAddress());
-                                break;
-                            }
+                        String lookupAddress = lookupRemoteHelper.lookupAddress(lookupName);
+                        if (lookupAddress != null) {
+                            channel.write(lookupAddress);
+                            break;
                         }
                         channel.write("Wrong username or user not registered.");
                         break;

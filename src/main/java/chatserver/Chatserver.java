@@ -43,6 +43,17 @@ public class Chatserver implements IChatserverCli, Runnable {
         this.userRequestStream = userRequestStream;
         this.userResponseStream = userResponseStream;
 
+        UserStore.getInstance().loadFromFile();
+
+        shell = new Shell(componentName, userRequestStream, userResponseStream);
+
+        shell.register(this);
+    }
+
+    @Override
+    public void run() {
+        Thread.currentThread().setName("ChatserverThread");
+
         try {
 
             Registry registry = LocateRegistry.getRegistry(
@@ -53,31 +64,10 @@ public class Chatserver implements IChatserverCli, Runnable {
             INameserverForChatserver root = (INameserver) registry.lookup(config
                     .getString("root_id"));
 
-            tcpServer = new TCPServer(config.getInt("tcp.port"), root);
-            udpServer = new UDPServer(config.getInt("udp.port"));
-
-            UserStore.getInstance().loadFromFile();
-
-            shell = new Shell(componentName, userRequestStream, userResponseStream);
-
-            shell.register(this);
-
-        } catch (NotBoundException | RemoteException e) {
-            userResponseStream.println("could not find root server, exiting...");
-        }
-
-
-    }
-
-	@Override
-	public void run() {
-        Thread.currentThread().setName("ChatserverThread");
-
-        try {
             IPublicKeyStore keyStore = new PublicKeyStore(new File(config.getString("keys.dir")));
             PrivateKey chatserverKey = Keys.readPrivatePEM(new File(config.getString("key")));
 
-            tcpServer = new TCPServer(config.getInt("tcp.port"), keyStore, chatserverKey);
+            tcpServer = new TCPServer(config.getInt("tcp.port"), keyStore, chatserverKey, root);
             udpServer = new UDPServer(config.getInt("udp.port"));
 
             Thread udpServerThread = new Thread(udpServer);
@@ -99,6 +89,8 @@ public class Chatserver implements IChatserverCli, Runnable {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+        } catch (NotBoundException | RemoteException e) {
+            userResponseStream.println("could not find root server, exiting...");
         } catch (IOException e) {
             e.printStackTrace();
         }

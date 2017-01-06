@@ -157,7 +157,7 @@ public class Client implements IClientCli, Runnable {
 
                         HmacChannel channel = new HmacChannel(new TCPChannel(addr[0], Integer.parseInt(addr[1])), secretKey);
                         channel.open();
-                        channel.write(username + ": " + message);
+                        channel.write(Client.this.username + ": " + message);
                         try {
                             String reply = channel.read();
                             shell.writeLine(username + " replied with '" + reply + "'");
@@ -275,6 +275,8 @@ public class Client implements IClientCli, Runnable {
             return "Success";
         } catch (EncryptedChannel.AuthException e) {
             return e.getMessage();
+        } catch (FileNotFoundException io){
+            return "Unknown user";
         }
     }
 
