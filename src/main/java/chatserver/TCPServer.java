@@ -3,7 +3,6 @@ package chatserver;
 import nameserver.INameserverForChatserver;
 import nameserver.exceptions.AlreadyRegisteredException;
 import nameserver.exceptions.InvalidDomainException;
-import util.AbstractTCPServer;
 import transport.AbstractTCPServer;
 import transport.EncryptedChannel;
 import transport.IChannel;
@@ -101,14 +100,12 @@ public class TCPServer extends AbstractTCPServer {
                             channel.write("Successfully registered.");
                             try {
                                 registerHelper.register(user);
-                                out.write("Successfully registered.");
+                                channel.write("Successfully registered.");
                             }catch (InvalidDomainException e){
-                                out.write("Invalid Domain!");
+                                channel.write("Invalid Domain!");
                             }catch (AlreadyRegisteredException a){
-                                out.write("Already registered!");
+                                channel.write("Already registered!");
                             }
-                            out.newLine();
-                            out.flush();
                             break;
                         }
                         channel.write("Not logged in.");
@@ -122,7 +119,7 @@ public class TCPServer extends AbstractTCPServer {
                             String lookupName = cmd[1];
                             String lookupAddress = lookupRemoteHelper.lookupAddress(lookupName);
                                 if(lookupAddress != null){
-                                    channel.write(lookup.getIpAddress());
+                                    channel.write(lookupAddress);
                                     break;
                                 }
                             channel.write("Wrong username or user not registered.");

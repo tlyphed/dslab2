@@ -38,8 +38,6 @@ public class LookupRemoteHelper {
             }
         }
 
-
-
         return chatserverToAsk.lookup(domainParts.get(domainParts.size() -1));
 
 
