@@ -5,7 +5,11 @@ import cli.Shell;
 import nameserver.INameserver;
 import nameserver.INameserverForChatserver;
 import util.Config;
+import util.IPublicKeyStore;
+import util.Keys;
+import util.PublicKeyStore;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -13,6 +17,7 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.security.PrivateKey;
 
 public class Chatserver implements IChatserverCli, Runnable {
 
@@ -64,29 +69,37 @@ public class Chatserver implements IChatserverCli, Runnable {
 
     }
 
-    @Override
-    public void run() {
-
-
+	@Override
+	public void run() {
         Thread.currentThread().setName("ChatserverThread");
 
-        Thread udpServerThread = new Thread(udpServer);
-        udpServerThread.setName("UPDServerThread");
-        udpServerThread.start();
-
-        Thread tcpServerThread = new Thread(tcpServer);
-        tcpServerThread.setName("TCPServerThread");
-        tcpServerThread.start();
-
-        Thread shellThread = new Thread(shell);
-        shellThread.setName("ShellThread");
-        shellThread.start();
-
         try {
-            udpServerThread.join();
-            tcpServerThread.join();
-            shellThread.join();
-        } catch (InterruptedException e) {
+            IPublicKeyStore keyStore = new PublicKeyStore(new File(config.getString("keys.dir")));
+            PrivateKey chatserverKey = Keys.readPrivatePEM(new File(config.getString("key")));
+
+            tcpServer = new TCPServer(config.getInt("tcp.port"), keyStore, chatserverKey);
+            udpServer = new UDPServer(config.getInt("udp.port"));
+
+            Thread udpServerThread = new Thread(udpServer);
+            udpServerThread.setName("UPDServerThread");
+            udpServerThread.start();
+
+            Thread tcpServerThread = new Thread(tcpServer);
+            tcpServerThread.setName("TCPServerThread");
+            tcpServerThread.start();
+
+            Thread shellThread = new Thread(shell);
+            shellThread.setName("ShellThread");
+            shellThread.start();
+
+            try {
+                udpServerThread.join();
+                tcpServerThread.join();
+                shellThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }

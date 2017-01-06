@@ -4,14 +4,21 @@ import nameserver.INameserverForChatserver;
 import nameserver.exceptions.AlreadyRegisteredException;
 import nameserver.exceptions.InvalidDomainException;
 import transport.AbstractTCPServer;
-import transport.EncryptedChannel;
+import transport.EncryptedChannelServer;
 import transport.IChannel;
+import util.IPublicKeyStore;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.security.PrivateKey;
 
 public class TCPServer extends AbstractTCPServer {
 
+    private IPublicKeyStore keyStore;
+    private PrivateKey chatserverKey;
+    private EncryptedChannelServer channel;
+
+    public TCPServer(int port, IPublicKeyStore keyStore, PrivateKey chatserverKey) {
     private final LookupRemoteHelper lookupRemoteHelper;
     private RegisterRemoteHelper registerHelper;
     private EncryptedChannelServer channel;
@@ -20,6 +27,8 @@ public class TCPServer extends AbstractTCPServer {
         super(port);
         this.lookupRemoteHelper = new LookupRemoteHelper(root);
         this.registerHelper = new RegisterRemoteHelper(root);
+        this.keyStore = keyStore;
+        this.chatserverKey = chatserverKey;
     }
 
     private void send(String message, TCPWorker sender) throws IOException {
@@ -32,7 +41,8 @@ public class TCPServer extends AbstractTCPServer {
 
     @Override
     protected IChannel wrapSocket(Socket socket) {
-        return new EncryptedChannel(super.wrapSocket(socket), EncryptedChannel.Mode.SERVER, new ServerKeyStore());
+        channel = new EncryptedChannelServer(super.wrapSocket(socket), keyStore, chatserverKey);
+        return channel;
     }
 
     protected void processInput(TCPWorker worker, IChannel channel) throws IOException {
@@ -46,6 +56,10 @@ public class TCPServer extends AbstractTCPServer {
             String cmd[] = line.split(" ");
             switch (cmd[0]) {
                 case "send":
+                    if (cmd.length > 1) {
+                        String msg = line.substring(line.indexOf(" ") + 1);
+                        send(user.getName() + ": " + msg, worker);
+                        channel.write("Message sent.");
                     if (cmd.length > 1) {
 
                         String msg = line.substring(line.indexOf(" ") + 1);
@@ -61,25 +75,20 @@ public class TCPServer extends AbstractTCPServer {
                         String ipAddress = cmd[1];
                         user.setIpAddress(ipAddress);
                         channel.write("Successfully registered.");
-                        try {
-                            registerHelper.register(user);
-                            channel.write("Successfully registered.");
-                        } catch (InvalidDomainException e) {
-                            channel.write("Invalid Domain!");
-                        } catch (AlreadyRegisteredException a) {
-                            channel.write("Already registered!");
-                        }
                         break;
+
                     }
                     channel.write("Wrong argument.");
                     break;
                 case "lookup":
                     if (cmd.length == 2) {
                         String lookupName = cmd[1];
-                        String lookupAddress = lookupRemoteHelper.lookupAddress(lookupName);
-                        if (lookupAddress != null) {
-                            channel.write(lookupAddress);
-                            break;
+                        User lookup = UserStore.getInstance().getUser(lookupName);
+                        if (lookup != null) {
+                            if (lookup.getIpAddress() != null) {
+                                channel.write(lookup.getIpAddress());
+                                break;
+                            }
                         }
                         channel.write("Wrong username or user not registered.");
                         break;
@@ -93,10 +102,8 @@ public class TCPServer extends AbstractTCPServer {
                     channel.write("Wrong argument.");
             }
         }
-        if (user != null) {
-            user.setOnline(false);
-            user.setIpAddress(null);
-        }
+        user.setOnline(false);
+        user.setIpAddress(null);
     }
 
 }

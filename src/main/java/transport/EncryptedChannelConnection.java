@@ -4,9 +4,9 @@ import java.io.IOException;
 
 public class EncryptedChannelConnection extends ChannelConnection {
 
-    private EncryptedChannel channel;
+    private EncryptedChannelClient channel;
 
-    public EncryptedChannelConnection(EncryptedChannel channel){
+    public EncryptedChannelConnection(EncryptedChannelClient channel){
         super(channel);
         this.channel = channel;
     }

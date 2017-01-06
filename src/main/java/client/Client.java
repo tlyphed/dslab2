@@ -4,9 +4,14 @@ import cli.Command;
 import cli.Shell;
 import transport.*;
 import util.Config;
+import util.IPrivateKeyStore;
+import util.Keys;
+import util.PrivateKeyStore;
 
 import java.io.*;
 import java.net.*;
+import java.security.Key;
+import java.security.PublicKey;
 
 public class Client implements IClientCli, Runnable {
 
@@ -28,6 +33,8 @@ public class Client implements IClientCli, Runnable {
 
     private String username = null;
 
+    private Key secretKey;
+
     /**
      * @param componentName      the name of the component - represented in the prompt
      * @param config             the configuration to use
@@ -45,35 +52,39 @@ public class Client implements IClientCli, Runnable {
 
         shell = new Shell(componentName, userRequestStream, userResponseStream);
         shell.register(this);
-
-        channelConnection = new EncryptedChannelConnection(new EncryptedChannel(new TCPChannel("localhost", tcpPort), EncryptedChannel.Mode.CLIENT, new ClientKeyStore()));
-        channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
-            @Override
-            public void onResponse(String response) {
-                Client.this.onResponse(response);
-            }
-        });
-
     }
 
     @Override
     public void run() {
         Thread.currentThread().setName("ClientThread");
 
-        Thread shellThread = new Thread(shell);
-        shellThread.setName("ShellThread");
-        shellThread.start();
-
-        Thread channelConnectionThread = new Thread(channelConnection);
-        channelConnectionThread.setName("ChannelConnectionThread");
-        channelConnectionThread.start();
-
         try {
-            channelConnectionThread.join();
-        } catch (InterruptedException e) {
-        }
+            IPrivateKeyStore keyStore = new PrivateKeyStore(new File(config.getString("keys.dir")));
+            PublicKey chatserverKey = Keys.readPublicPEM(new File(config.getString("chatserver.key")));
+            secretKey = Keys.readSecretKey(new File(config.getString("hmac.key")));
 
-        try {
+            channelConnection = new EncryptedChannelConnection(new EncryptedChannelClient(new TCPChannel("localhost", tcpPort), keyStore, chatserverKey));
+            channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
+                @Override
+                public void onResponse(String response) {
+                    Client.this.onResponse(response);
+                }
+            });
+
+            Thread shellThread = new Thread(shell);
+            shellThread.setName("ShellThread");
+            shellThread.start();
+
+            Thread channelConnectionThread = new Thread(channelConnection);
+            channelConnectionThread.setName("ChannelConnectionThread");
+            channelConnectionThread.start();
+
+            try {
+                channelConnectionThread.join();
+            } catch (InterruptedException e) {
+            }
+
+
             exit();
         } catch (IOException e) {
             e.printStackTrace();
@@ -90,30 +101,9 @@ public class Client implements IClientCli, Runnable {
             } else {
                 shell.writeLine(msg);
             }
-        } catch (IOException e){
+        } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    @Override
-    @Command
-    public void login(final String username, String password) throws IOException {
-        channelConnection.writeToServer("login " + username + " " + password, false, new ChannelConnection.ResponseListener() {
-            @Override
-            public void onResponse(String response) {
-                if (response.equals("Successfully logged in.")) {
-                    Client.this.username = username;
-                }
-            }
-        });
-    }
-
-    @Override
-    @Command
-    public void logout() throws IOException {
-        channelConnection.writeToServer("logout");
-        username = null;
-        tcpServer.shutdown();
     }
 
     @Override
@@ -165,18 +155,17 @@ public class Client implements IClientCli, Runnable {
                     } else {
                         String addr[] = response.split(":");
 
-                        try (Socket socket = new Socket(addr[0], Integer.parseInt(addr[1]));
-                             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
-                            out.write(Client.this.username + ": " + message);
-                            out.newLine();
-                            out.flush();
+                        HmacChannel channel = new HmacChannel(new TCPChannel(addr[0], Integer.parseInt(addr[1])), secretKey);
+                        channel.open();
+                        channel.write(username + ": " + message);
+                        try {
+                            String reply = channel.read();
+                            shell.writeLine(username + " replied with '" + reply + "'");
 
-                            String ack = in.readLine();
-                            if (ack.equals("!ack")) {
-                                shell.writeLine(username + " replied with ack!");
-                            }
+                        } catch (HmacChannel.MessageTamperedException e){
+                            shell.writeLine("received tampered message (" + e.getTamperedMsg() + ")");
                         }
+
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -198,7 +187,7 @@ public class Client implements IClientCli, Runnable {
             String addr[] = privateAddress.split(":");
             InetAddress.getByName(addr[0]);
             final int port = Integer.parseInt(addr[1]);
-            if(!AbstractTCPServer.checkPort(port)){
+            if (!AbstractTCPServer.checkPort(port)) {
                 shell.writeLine("Port already used.");
                 return;
             }
@@ -213,9 +202,19 @@ public class Client implements IClientCli, Runnable {
                             tcpServer = new AbstractTCPServer(port) {
                                 @Override
                                 protected void processInput(TCPWorker worker, IChannel channel) throws IOException {
-                                    String line = channel.read();
-                                    shell.writeLine(line);
-                                    channel.write("!ack");
+                                    try {
+                                        String line = channel.read();
+                                        shell.writeLine(line);
+                                        channel.write("!ack");
+                                    } catch (HmacChannel.MessageTamperedException e){
+                                        shell.writeLine("received tampered message (" + e.getTamperedMsg() + ")");
+                                        channel.write("!tampered " + e.getTamperedMsg());
+                                    }
+                                }
+
+                                @Override
+                                protected IChannel wrapSocket(Socket socket) {
+                                    return new HmacChannel(super.wrapSocket(socket), secretKey);
                                 }
                             };
                             Thread listeningThread = new Thread(tcpServer);

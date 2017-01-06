@@ -7,29 +7,6 @@ public interface IClientCli {
 	// --- Commands needed for Lab 1 ---
 
 	/**
-	 * Authenticates the client with the provided username and password.
-	 *
-	 * @param username
-	 *            the name of the user
-	 * @param password
-	 *            the password
-	 * @return status whether the authentication was successful or not
-	 * @throws IOException
-	 *             if an I/O error occurs
-	 */
-	public void login(String username, String password) throws IOException;
-
-	/**
-	 * Performs a logout if necessary and closes open connections between client
-	 * and chatserver.
-	 *
-	 * @return message stating whether the logout was successful
-	 * @throws IOException
-	 *             if an I/O error occurs
-	 */
-	public void logout() throws IOException;
-
-	/**
 	 * Sends a public message to all users that are currently online.
 	 *
 	 * @param message
