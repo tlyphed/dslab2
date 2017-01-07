@@ -16,7 +16,6 @@ public class TCPServer extends AbstractTCPServer {
 
     private IPublicKeyStore keyStore;
     private PrivateKey chatserverKey;
-    private EncryptedChannelServer channel;
     private final LookupRemoteHelper lookupRemoteHelper;
     private final RegisterRemoteHelper registerHelper;
 
@@ -39,13 +38,12 @@ public class TCPServer extends AbstractTCPServer {
 
     @Override
     protected IChannel wrapSocket(Socket socket) {
-        channel = new EncryptedChannelServer(super.wrapSocket(socket), keyStore, chatserverKey);
-        return channel;
+        return new EncryptedChannelServer(super.wrapSocket(socket), keyStore, chatserverKey);
     }
 
     protected void processInput(TCPWorker worker, IChannel channel) throws IOException {
         String line;
-        User user = UserStore.getInstance().getUser(this.channel.getUsername());
+        User user = UserStore.getInstance().getUser(((EncryptedChannelServer) channel).getUsername());
         if (user == null) {
             throw new IOException("user unknown");
         }
