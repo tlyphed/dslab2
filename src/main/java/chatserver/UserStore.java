@@ -35,6 +35,7 @@ public class UserStore {
     }
 
     public synchronized User getUser(String name){
+        System.out.println("get name " + name);
         return userMap.get(name);
     }
 

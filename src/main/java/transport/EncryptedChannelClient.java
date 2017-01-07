@@ -86,6 +86,10 @@ public class EncryptedChannelClient extends EncryptedChannel{
 
             String serverCheck = new String(decode(channel.read()));
 
+            if(serverCheck.contains("Already")){
+                throw new AuthException("Already logged in!");
+            }
+
             if(!serverCheck.equals("Success")){
                 throw new AuthException("auth failed");
             }

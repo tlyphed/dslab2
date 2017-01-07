@@ -1,5 +1,6 @@
 package transport;
 
+import chatserver.UserStore;
 import org.bouncycastle.util.encoders.Base64;
 import util.IPublicKeyStore;
 
@@ -88,6 +89,12 @@ public class EncryptedChannelServer extends EncryptedChannel {
 
                 if (!serverChallenge.equals(challenge)) {
                     throw new AuthException("server challenge doesn't match");
+                }
+
+                if(UserStore.getInstance().getUser(username) != null && UserStore.getInstance().getUser(username).isOnline()){
+                    channel.write(encode("Already logged in!".getBytes()));
+                    return;
+
                 }
 
                 setAuthenticated(true);
