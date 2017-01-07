@@ -35,6 +35,9 @@ public class Client implements IClientCli, Runnable {
 
     private Key secretKey;
 
+    private IPrivateKeyStore keyStore;
+    private PublicKey chatserverKey;
+
     /**
      * @param componentName      the name of the component - represented in the prompt
      * @param config             the configuration to use
@@ -59,8 +62,8 @@ public class Client implements IClientCli, Runnable {
         Thread.currentThread().setName("ClientThread");
 
         try {
-            IPrivateKeyStore keyStore = new PrivateKeyStore(new File(config.getString("keys.dir")));
-            PublicKey chatserverKey = Keys.readPublicPEM(new File(config.getString("chatserver.key")));
+            keyStore = new PrivateKeyStore(new File(config.getString("keys.dir")));
+            chatserverKey = Keys.readPublicPEM(new File(config.getString("chatserver.key")));
             secretKey = Keys.readSecretKey(new File(config.getString("hmac.key")));
 
             channelConnection = new EncryptedChannelConnection(new EncryptedChannelClient(new TCPChannel("localhost", tcpPort), keyStore, chatserverKey));
@@ -79,13 +82,6 @@ public class Client implements IClientCli, Runnable {
             channelConnectionThread.setName("ChannelConnectionThread");
             channelConnectionThread.start();
 
-            try {
-                channelConnectionThread.join();
-            } catch (InterruptedException e) {
-            }
-
-
-            exit();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -104,6 +100,35 @@ public class Client implements IClientCli, Runnable {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    @Override
+    @Command
+    public String login(final String username, final String password) throws IOException {
+        shell.writeLine("This command has been removed! Use '!authenticate <username>' for authentication");
+        return null;
+    }
+
+    @Override
+    @Command
+    public String logout() throws IOException {
+        if(username!=null){
+            channelConnection.close();
+            shell.writeLine(username+" was logged out");
+            channelConnection = new EncryptedChannelConnection(new EncryptedChannelClient(new TCPChannel("localhost", tcpPort), keyStore, chatserverKey));
+            channelConnection.setResponseListener(new ChannelConnection.ResponseListener() {
+                @Override
+                public void onResponse(String response) {
+                    Client.this.onResponse(response);
+                }
+            });
+
+            Thread channelConnectionThread = new Thread(channelConnection);
+            channelConnectionThread.setName("ChannelConnectionThread");
+            channelConnectionThread.start();
+
+        }
+        return null;
     }
 
     @Override

@@ -5,7 +5,28 @@ import java.io.IOException;
 public interface IClientCli {
 
 	// --- Commands needed for Lab 1 ---
+	public String login(String username, String password) throws IOException;
 
+	/**
+	 * Performs a logout if necessary and closes open connections between client
+	 * and chatserver.
+	 *
+	 * @return message stating whether the logout was successful
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	public String logout() throws IOException;
+
+	/**
+	 * Sends a public message to all users that are currently online.
+	 *
+	 * @param message
+	 *            message to be sent to all online users
+	 *
+	 * @return message stating whether the sending was successful
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
 	/**
 	 * Sends a public message to all users that are currently online.
 	 *

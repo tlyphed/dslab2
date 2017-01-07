@@ -125,7 +125,7 @@ public class Chatserver implements IChatserverCli, Runnable {
      * @param args the first argument is the name of the {@link Chatserver}
      *             component
      */
-    public static void main(String[] args) {
+    public static void main(String[] args){
         String name = "chatserver";
         if (args.length > 0) {
             name = args[0];
