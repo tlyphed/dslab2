@@ -10,14 +10,7 @@ import java.security.*;
 
 public abstract class EncryptedChannel implements IChannel{
 
-    public class AuthException extends IOException {
-        public AuthException(Exception e){
-            super(e);
-        }
-        public AuthException(String msg){
-            super(msg);
-        }
-    }
+
 
     protected static final String ALGORITHM_AES = "AES/CTR/NoPadding";
     protected static final String ALGORITHM_RSA = "RSA/NONE/OAEPWithSHA256AndMGF1Padding";

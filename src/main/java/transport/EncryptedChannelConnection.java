@@ -12,6 +12,9 @@ public class EncryptedChannelConnection extends ChannelConnection {
     }
 
     public void authenticate(String username) throws IOException {
+        if(channel.isAuthenticated()) {
+            throw new AuthException("logout first");
+        }
         channel.authenticate(username);
         startReadingThread();
     }

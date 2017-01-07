@@ -273,7 +273,7 @@ public class Client implements IClientCli, Runnable {
             channelConnection.authenticate(username);
             this.username = username;
             return "Success";
-        } catch (EncryptedChannel.AuthException e) {
+        } catch (AuthException e) {
             return e.getMessage();
         } catch (FileNotFoundException io){
             return "Unknown user";
