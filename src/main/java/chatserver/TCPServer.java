@@ -55,7 +55,9 @@ public class TCPServer extends AbstractTCPServer {
             switch (cmd[0]) {
                 case "send":
                     if (cmd.length > 1) {
+
                         String msg = line.substring(line.indexOf(" ") + 1);
+
                         send(user.getName() + ": " + msg, worker);
                         channel.write("Message sent.");
                         break;

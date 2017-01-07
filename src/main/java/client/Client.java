@@ -271,7 +271,7 @@ public class Client implements IClientCli, Runnable {
     public String authenticate(String username) throws IOException {
         try {
             channelConnection.authenticate(username);
-
+            this.username=username;
             return "Success";
         } catch (EncryptedChannel.AuthException e) {
             return e.getMessage();

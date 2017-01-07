@@ -209,13 +209,13 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
         } else if (domains.size() > 1) {
 
             if(!nameServers.containsKey(domains.get(domains.size() - 1))){
-                userResponseStream.println("Register request rejected; '"+domain+"' is invalid");
+                userResponseStream.println("Register request for '"+domain+"' rejected; '"+domains.get(domains.size() - 1)+"' doesn't exist");
                 throw new InvalidDomainException("'"+domain+"' can't be registered; Domain '"+domains.get(domains.size() - 1)+"' doesn't exist");
             }
             INameserver topDomain = nameServers.get(domains.get(domains.size() - 1)).getNameserver();
 
             //Pass the request on to the next domain level
-            userResponseStream.println("Passing register request to " + domains.get(domains.size() - 1));
+            userResponseStream.println("Passing register request to nameserver '" + domains.get(domains.size() - 1)+"'");
             domains.remove(domains.size() - 1);
             topDomain.registerNameserver(rebuildDomainFromList(domains), nameserver, nameserverForChatserver);
 
