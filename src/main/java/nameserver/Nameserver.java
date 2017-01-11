@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.rmi.AlreadyBoundException;
+import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -66,14 +67,10 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
     @Override
     public void run() {
 
-        //Start Shellthread
-        Thread shellThread = new Thread(shell);
-        shellThread.setName("ShellThread");
-        shellThread.start();
+
 
         this.isRoot = checkRoot(config);
 
-        // TODO
         //If the config does not contain "domain" this Nameserver is the root-ns
         if (isRoot) {
             this.mDomain = ".";
@@ -89,11 +86,11 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
                 // bind the obtained remote object on specified binding name in the
                 // registry
                 registry.bind(config.getString("root_id"), remote);
-            } catch (RemoteException e) {
-                throw new RuntimeException("Error while starting server.", e);
-            } catch (AlreadyBoundException e) {
-                throw new RuntimeException(
-                        "Error while binding remote object to registry.", e);
+
+                startShell();
+            } catch (RemoteException | AlreadyBoundException e) {
+                userResponseStream.println("Could not start root server, is another one running?");
+                tryExit();
             }
         } else {
             this.mDomain = config.getString("domain");
@@ -105,16 +102,37 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
                 rootNS.registerNameserver(config.getString("domain"), (INameserver) UnicastRemoteObject
                         .exportObject(this, 0), this);
 
+                startShell();
+
             } catch (RemoteException e) {
                 userResponseStream.println("Could not connect to registry or the remote, please start the root nameserver and all parent nameservers!");
+                tryExit();
             } catch (NotBoundException e) {
                 userResponseStream.println("Fatal: could not bind!" + e.getMessage());
+                tryExit();
             } catch (AlreadyRegisteredException e) {
-                userResponseStream.println("The domain of this Nameserver is already registered");
+                userResponseStream.println("The domain of this nameserver is already registered");
+                tryExit();
             } catch (InvalidDomainException e) {
                 userResponseStream.println(e);
+                tryExit();
             }
         }
+    }
+
+    private void tryExit() {
+        try {
+            exit();
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+    }
+
+    private void startShell() {
+        //Start Shellthread
+        Thread shellThread = new Thread(shell);
+        shellThread.setName("ShellThread");
+        shellThread.start();
     }
 
     private INameserver lookupRoot(Config config) throws RemoteException, NotBoundException {
@@ -169,16 +187,23 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
     @Override
     @Command
     public String exit() throws IOException {
-        UnicastRemoteObject.unexportObject(this, true);
-        if(isRoot){
+        try {
+            UnicastRemoteObject.unexportObject(this, true);
+        } catch (NoSuchObjectException nsu) {
+
+        }
+        if (isRoot) {
             try {
-                registry.unbind(config.getString("root_id"));
-                UnicastRemoteObject.unexportObject(registry, true);
-            } catch (NotBoundException e) {
+                if (registry != null) {
+                    registry.unbind(config.getString("root_id"));
+                    UnicastRemoteObject.unexportObject(registry, true);
+                }
+            } catch (NotBoundException | NoSuchObjectException e) {
                 userResponseStream.println("could not unbind");
             }
         }
         shell.close();
+
         return null;
     }
 
@@ -201,21 +226,21 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
 
 
             //Register domain by saving the RMI objects in local storage
-            if(nameServers.putIfAbsent(domain, new NameserverEntry(nameserver, nameserverForChatserver)) != null){
-                userResponseStream.println("Domain '"+domain+"' is already registered");
+            if (nameServers.putIfAbsent(domain, new NameserverEntry(nameserver, nameserverForChatserver)) != null) {
+                userResponseStream.println("Domain '" + domain + "' is already registered");
                 throw new AlreadyRegisteredException(domain);
             }
             userResponseStream.println("Registered domain " + domain);
         } else if (domains.size() > 1) {
 
-            if(!nameServers.containsKey(domains.get(domains.size() - 1))){
-                userResponseStream.println("Register request for '"+domain+"' rejected; '"+domains.get(domains.size() - 1)+"' doesn't exist");
-                throw new InvalidDomainException("'"+domain+"' can't be registered; Domain '"+domains.get(domains.size() - 1)+"' doesn't exist");
+            if (!nameServers.containsKey(domains.get(domains.size() - 1))) {
+                userResponseStream.println("Register request for '" + domain + "' rejected; '" + domains.get(domains.size() - 1) + "' doesn't exist");
+                throw new InvalidDomainException("'" + domain + "' can't be registered; Domain '" + domains.get(domains.size() - 1) + "' doesn't exist");
             }
             INameserver topDomain = nameServers.get(domains.get(domains.size() - 1)).getNameserver();
 
             //Pass the request on to the next domain level
-            userResponseStream.println("Passing register request to nameserver '" + domains.get(domains.size() - 1)+"'");
+            userResponseStream.println("Passing register request to nameserver '" + domains.get(domains.size() - 1) + "'");
             domains.remove(domains.size() - 1);
             topDomain.registerNameserver(rebuildDomainFromList(domains), nameserver, nameserverForChatserver);
 
@@ -240,8 +265,8 @@ public class Nameserver implements INameserverCli, INameserver, Runnable {
     }
 
     /**
-     * @param userName   the user name, e.q. bob.berlin.de
-     * @param address    the user address
+     * @param userName the user name, e.q. bob.berlin.de
+     * @param address  the user address
      * @throws RemoteException
      * @throws AlreadyRegisteredException
      * @throws InvalidDomainException
