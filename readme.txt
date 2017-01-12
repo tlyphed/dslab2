@@ -1,11 +1,9 @@
-Buglist:
 
--Server and Client throw exceptions on exit (on purpose?)
+All Stages implemented.
 
--Authentication with same account from multiple clients is possible
+The nameserver is implemented in one class, which could cause security concers for the exported
+project, but this in inevitable because of the template interfaces.
 
--Logout not implemented
+The Nameserver-Communication of the Chatserver is in the *RemoteHelper classes.
 
--Server throws NullPointerException on first authenticate
-
--Calling !authenticate after authentication crashes the client-server communication
+The Encryption & Auth part is implemnted via the decorator pattern.
