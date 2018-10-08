@@ -29,6 +29,7 @@ public class Chatserver implements IChatserverCli, Runnable {
 	 *            the input stream to read user input from
 	 * @param userResponseStream
 	 *            the output stream to write the console output to
+	 *
 	 */
 	public Chatserver(String componentName, Config config, InputStream userRequestStream, PrintStream userResponseStream) {
 		this.componentName = componentName;
